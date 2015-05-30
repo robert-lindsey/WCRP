@@ -44,6 +44,10 @@ inline bool equals_zero(const double x) {
 	return abs(x) <= TOL;
 }
 
+inline bool equals_one(const double x) {
+     return abs(1.0 - x) <= TOL;
+}
+
 // log(proportional to a uniform prior on log(x) )
 double log_loggamma_prior_density(const double x) {
 	assert(x <= 0);
@@ -61,7 +65,6 @@ double log_logalphaprime_prior_density(const double log_alpha_prime) {
 //////////// WCRP equations /////////////////////
 /////////////////////////////////////////////////
 
-
 // log(proportional to equation 1 in the NIPS paper)
 double log_old_table_probability(const size_t num_seated, const double K, const double log_gamma, const size_t num_expert_provided_skills) {
 	const double gamma = exp(log_gamma);
@@ -76,7 +79,7 @@ double log_new_table_probability(const double log_alpha_prime, const double log_
 
 
 // compute the variable K as defined in equation 1 in the NIPS paper
-// when generative_mode = false, this assumes that the item has not been assigned to a table yet
+// when generative_mode = false, this function assumes that the item has not been assigned to a table yet
 double MixtureWCRP::compute_K(const size_t item, const size_t table_id, const bool generative_mode) const {
 
 	assert(generative_mode || seating_arrangement.at(item) == UNASSIGNED);
@@ -101,7 +104,7 @@ double MixtureWCRP::compute_K(const size_t item, const size_t table_id, const bo
 	const bool has_item_expert_label = (counts.find(item_expert_label) != counts.end());
 	const double numerator_K = (has_item_expert_label) ? pow(gamma, max_count - counts.at(item_expert_label)) : pow(gamma, max_count);
 	double denominator_K =  (num_expert_provided_skills - counts.size()) * pow(gamma, max_count); // the n_k^j == 0 cases
-	for (boost::unordered_map<size_t, int>::const_iterator count_itr = counts.begin(); count_itr != counts.end(); count_itr++) denominator_K += pow(gamma, max_count - count_itr->second);  // the n_k^j != 0 cases
+	for (boost::unordered_map<size_t, int>::const_iterator count_itr = counts.begin(); count_itr != counts.end(); count_itr++) denominator_K += pow(gamma, max_count - count_itr->second); // the n_k^j != 0 cases
 	return numerator_K / denominator_K;
 }
 
@@ -113,7 +116,6 @@ double MixtureWCRP::compute_K(const size_t item, const size_t table_id, const bo
 // object constructor
 MixtureWCRP::MixtureWCRP(Random * generator, 
                          const set<size_t> & train_students, 
-                         const set<size_t> & test_students, 
                          const vector< vector<bool> > & recall_sequences, 
                          const vector< vector<size_t> > & item_sequences, 
                          const vector<size_t> & provided_skill_assignments, 
@@ -125,25 +127,24 @@ MixtureWCRP::MixtureWCRP(Random * generator,
                          
  generator(generator), 
  train_students(train_students), 
- test_students(test_students), 
  recall_sequences(recall_sequences), 
  item_sequences(item_sequences), 
  provided_skill_assignments(provided_skill_assignments), 
  num_students(num_students), 
  num_items(num_items), 
  num_subsamples(num_subsamples), 
+ use_expert_labels(equals_one(beta)), 
  log_gamma(log(1.0 - beta)), 
  num_used_skills(0), 
  tables_ever_instantiated(UNASSIGNED+1) {
 
-	// for legacy reasons, we define gamma = 1.0 - beta and do inference on log_gamma 
+	// for legacy reasons, i define gamma = 1.0 - beta and do inference on log_gamma 
 	const double gamma = 1.0 - beta; 
 
 	assert(!train_students.empty() );
 	assert(!provided_skill_assignments.empty());
-	assert(gamma >= 0 && gamma <= 1);
+	assert(beta >= 0 && beta <= 1);
 	
-	use_expert_labels = equals_zero(gamma);
 	num_expert_provided_skills = 1 + *max_element(provided_skill_assignments.begin(), provided_skill_assignments.end());
 
 	// the variable all_items will be useful during gibbs sampling
@@ -168,8 +169,6 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 	}
 
 	// to avoid unnecessary work during MCMC, figure out which students studied which items in the training data
-	// also compute some statistics of the dataset so we can make a simple baseline model
-	vector<double> provided_skill_totals(num_expert_provided_skills, 0), provided_skill_counts(num_expert_provided_skills, 0);
 	ever_studied.resize(num_students); // training data only
 	pRT_samples.resize(num_students);
 	for (size_t student = 0; student < num_students; student++) {
@@ -179,13 +178,10 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 			for (size_t trial = 0; trial < item_sequences.at(student).size(); trial++) {
 				const size_t item = item_sequences.at(student).at(trial);
 				ever_studied[student][item] = true;
-				provided_skill_totals[provided_skill_assignments.at(item)] += recall_sequences.at(student).at(trial);
-				provided_skill_counts[provided_skill_assignments.at(item)]++;
 			}
 		}
 	}
 
-	// store the baseline model's constant predictions, among other things
 	students_who_studied.resize(num_items);
 	all_first_encounters.resize(num_items);
 	for (size_t item = 0; item < num_items; item++) {
@@ -195,15 +191,10 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 				all_first_encounters[item].push_back(first_encounter.at(student).at(item));
 			}
 		}
-
-		const size_t provided_skill_id = provided_skill_assignments.at(item);
-		if (provided_skill_means.find(provided_skill_id) == provided_skill_means.end()) {
-			if (provided_skill_counts[provided_skill_id] > 0) provided_skill_means[provided_skill_id] = provided_skill_totals.at(provided_skill_id) / provided_skill_counts.at(provided_skill_id);
-			else provided_skill_means[provided_skill_id] = .5;
-		}
 	}
 
 	// initialize alpha'
+	// if init_alpha_prime < 0, it's a special flag indicating that we should sample it to initialize 
 	if (init_alpha_prime < 0) log_alpha_prime = log(generator->sampleGamma(HYPER_AP1, HYPER_AP2)); // sample value
 	else log_alpha_prime = log(init_alpha_prime); // fix value
 
@@ -266,11 +257,249 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 MixtureWCRP::~MixtureWCRP() {
 	// close any open file handles 
 	if (outfile_meta.is_open()) outfile_meta.close();
-	if (outfile_predictions.is_open()) outfile_predictions.close();
-	if (outfile_skills.is_open()) outfile_skills.close();
 }
 
 
+// returns the expected posterior probability that the student responds correctly to the trial number 
+double MixtureWCRP::get_estimated_recall_prob(const size_t student, const size_t trial) const {
+	assert(!pRT_samples.at(student).at(trial).empty()); // need to have called run_mcmc first 
+	return vector_mean(pRT_samples.at(student).at(trial));
+}
+
+
+// returns the skill assignments for each item across all samples
+// each returned vector has one entry per item denoting the skill id
+vector< vector<size_t> > MixtureWCRP::get_skill_assignments() const {
+	assert(!skill_label_samples.empty()); // need to have called run_mcmc first 
+	return skill_label_samples;
+}
+
+
+// returns the skill assignments which maximized the training data log likelihood 
+// the returned vector has one entry per item denoting the skill id
+vector<size_t> MixtureWCRP::get_most_likely_skill_assignments() const {
+	assert(!skill_label_samples.empty()); // need to have called run_mcmc first 
+	assert(train_ll_samples.size() == skill_label_samples.size());
+	
+	double best_ll = 0;
+	size_t best_sample = 0;
+	
+	for (size_t sample = 0; sample < train_ll_samples.size(); sample++) {
+		if (sample == 0 || train_ll_samples.at(sample) > best_ll) {
+			best_ll = train_ll_samples.at(sample);
+			best_sample = sample;
+		}
+	}
+	
+	return skill_label_samples.at(best_sample);
+}
+	
+	
+
+void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const bool infer_gamma, const bool infer_alpha_prime) {
+
+	for (size_t iter = 0; iter < num_iterations; iter++) {
+		cout << "SAMPLING ITERATION " << (iter+1) << " OF " << num_iterations << endl;
+
+		clock_t begin = clock();
+		
+		// update alpha' and gamma
+		cout << "  resampling WCRP hyperparameters" << endl;
+		double cur_seating_lp = log_seating_prob();
+		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
+			if (!use_expert_labels && infer_alpha_prime) cur_seating_lp = slice_resample_wcrp_param(&log_alpha_prime, cur_seating_lp, -10, 11, .25, log_logalphaprime_prior_density);
+
+			// update gamma
+			if (infer_gamma) cur_seating_lp = slice_resample_wcrp_param(&log_gamma, cur_seating_lp, -8, 0, .25, log_loggamma_prior_density);
+		}
+		
+		// update the BKT parameters for each skill
+		cout << "  resampling skill parameters" << endl;
+		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
+			for (boost::unordered_map<size_t, struct bkt_parameters>::iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) {
+				const size_t table_id = table_itr->first;
+
+				// figure out which items are assigned to this skill
+				vector<size_t> items_assigned_to_skill;
+				for (size_t item = 0; item < num_items; item++) {
+					if (seating_arrangement.at(item) == table_id) items_assigned_to_skill.push_back(item);
+				}
+
+				// figure out which students in the training set would be affected by a change in this skill's BKT parameterization
+				vector<size_t> students_to_include, first_exposures;
+				for (size_t student = 0; student < num_students; student++) {
+					if (train_students.count(student) && studied_any_of(student, items_assigned_to_skill)) {
+						students_to_include.push_back(student);
+						size_t min_val = item_sequences.at(student).size();
+						for (vector<size_t>::const_iterator item_itr = items_assigned_to_skill.begin(); item_itr != items_assigned_to_skill.end(); item_itr++) {
+							if (first_encounter.at(student).at(*item_itr) < min_val) min_val = first_encounter.at(student).at(*item_itr);
+						}
+						first_exposures.push_back(min_val);
+					}
+				}
+
+				// update the skill's BKT parameters in random order
+				vector<double * > param_ptrs;
+				param_ptrs.push_back(&(table_itr->second.psi));
+				param_ptrs.push_back(&(table_itr->second.mu));
+				param_ptrs.push_back(&(table_itr->second.pi1));
+				param_ptrs.push_back(&(table_itr->second.prop0));
+				generator->shuffle(param_ptrs);
+				double cur_ll = skill_log_likelihood(table_id, students_to_include, first_exposures);
+				for (vector<double *>::iterator param_itr = param_ptrs.begin(); param_itr != param_ptrs.end(); param_itr++) {
+					cur_ll = slice_resample_bkt_parameter(table_id, *param_itr, students_to_include, first_exposures, cur_ll);
+				}
+			}
+		}
+
+		// update the WCRP seating arrangement
+		if (!use_expert_labels) {
+			cout << "  resampling skill assignments" << endl;
+			generator->shuffle(all_items);
+			for (vector<size_t>::const_iterator item_itr = all_items.begin(); item_itr != all_items.end(); item_itr++) gibbs_resample_skill(*item_itr);
+		}
+		else cout << "  skipping resampling the skill assignments because we're using the expert labels" << endl;
+
+		clock_t end = clock();
+  		double elapsed_ms = (end - begin)/(CLOCKS_PER_SEC/1000.0);
+		
+		// print out a status update
+		size_t train_n, test_n;
+		const double train_ll = full_data_log_likelihood(true, train_n);
+		const double test_ll = full_data_log_likelihood(false, test_n);
+		if (!use_expert_labels) cout << "  log_alpha_prime = " << log_alpha_prime << " (alpha' = " << exp(log_alpha_prime) << ")" << endl;
+		cout << "  log_gamma = " << log_gamma << " (gamma = " << exp(log_gamma) << ")" << endl;
+		cout << "  TRAINING STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-train_ll / train_n) << endl;
+		cout << "  HELDOUT STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-test_ll / test_n) << endl;
+		cout << "  iteration completed in " << elapsed_ms / 60000.0 << " minutes." << endl;
+		cout << "  current number of skills: " << num_used_skills << endl << endl;
+		/////////////////////////////////////
+
+		if (iter >= burn) record_sample(train_ll);
+		 
+		// record_sample(iter, burn, infer_gamma, elapsed_ms / 60000.0, train_ll, test_ll, train_n, test_n, num_used_skills, log_seating_prob());
+	}
+
+}
+
+
+// resample the skill assignment (table) for this item (customer)
+// see algorithm 8 from http://www.stat.purdue.edu/~rdutta/24.PDF
+void MixtureWCRP::gibbs_resample_skill(const size_t item) {
+
+	const size_t cur_table_id = seating_arrangement.at(item);
+	const vector<size_t> & affected_students = students_who_studied.at(item);
+	const vector<size_t> & first_exposures = all_first_encounters.at(item);
+
+	// unassign the item's skill label
+	remove_item_from_table(item, cur_table_id);
+
+	// precompute each student's BKT sufficient statistic up to the first encounter of item
+	vector< boost::unordered_map<size_t, double> > p_hat(affected_students.size());
+	for (size_t student_idx = 0; student_idx < affected_students.size(); student_idx++) cache_p_hat(affected_students.at(student_idx), first_exposures.at(student_idx), p_hat[student_idx]);
+
+	vector<double> data_lp_with_item, data_lp_without_item, seating_lp;
+
+	// preallocate memory
+	const size_t final_size = extant_tables.size() + num_subsamples;
+	data_lp_with_item.reserve(final_size);
+	data_lp_without_item.reserve(final_size);
+	seating_lp.reserve(final_size);
+
+	// compute the data log likelihood (of affected students) for each extant skill with and without item being assigned to it
+	// also compute the log probability of sitting here
+	vector<size_t> keys;
+	keys.reserve(extant_tables.size());
+	for (set<size_t>::const_iterator table_itr = extant_tables.begin(); table_itr != extant_tables.end(); table_itr++) { // note: extant_tables won't change in this loop
+		// data likelihood; with
+		assign_item_to_table(item, *table_itr, false);
+		data_lp_with_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
+		
+		// data likelihood; without
+		remove_item_from_table(item, *table_itr);
+		data_lp_without_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
+		
+		// seating probability
+		const double K = compute_K(item, *table_itr, false);
+		seating_lp.push_back(log_old_table_probability(table_sizes.at(*table_itr), K, log_gamma, num_expert_provided_skills));
+
+		keys.push_back(*table_itr);
+	}
+
+	// use the precomputed marginal likelihoods for calculating the new seating prob
+	data_lp_with_item.insert(data_lp_with_item.end(), singleton_skill_data_lp.at(item).begin(), singleton_skill_data_lp.at(item).end());
+	data_lp_without_item.resize(data_lp_without_item.size() + num_subsamples, 0.0);
+	seating_lp.resize(seating_lp.size() + num_subsamples, log_new_table_probability(log_alpha_prime, log_gamma, num_expert_provided_skills) - log(1.0*num_subsamples));
+
+	assert(data_lp_with_item.size() == num_used_skills + num_subsamples);
+	assert(data_lp_without_item.size() == num_used_skills + num_subsamples);
+	assert(seating_lp.size() == num_used_skills + num_subsamples);
+	
+	// consider assigning every possible skill label to this item
+	vector<double> proportional_log_probs(seating_lp.size());
+	for (size_t event = 0; event < seating_lp.size(); event++) proportional_log_probs[event] = seating_lp.at(event) + data_lp_with_item.at(event) - data_lp_without_item.at(event);
+
+	// draw a new skill label
+	const size_t num_extant_tables = extant_tables.size();
+	const size_t drawn_event = (size_t) generator->sampleUnnormalizedDiscrete(proportional_log_probs);
+	if (drawn_event >= num_extant_tables) { // if we decided to create a new skill
+		assign_item_to_table(item, tables_ever_instantiated++, true); // sit down
+		const size_t chosen_subsample = drawn_event - num_extant_tables;
+		parameters[seating_arrangement.at(item)] = prior_samples.at(chosen_subsample); // assign parameters
+	}
+	else { // else we decided to use an existing skill 
+		const size_t table_id = keys.at(drawn_event);
+		assign_item_to_table(item, table_id, false);
+	}
+}
+
+
+void MixtureWCRP::record_sample(const double train_ll) {
+
+	// record the current training data log likelihood
+	train_ll_samples(train_ll);
+
+	// record the current partitioning of items into skills 	
+	boost::unordered_map<size_t, int> skill_labels;
+	vector<size_t> cur_assignments(num_items);
+	for (size_t item = 0; item < num_items; item++) {
+		const size_t table_id = seating_arrangement.at(item);
+		if (skill_labels.find(table_id) == skill_labels.end()) skill_labels[table_id] = skill_labels.size();
+		cur_assignments[item] = skill_labels.at(table_id);
+	}
+	skill_label_samples.push_back(cur_assignments);
+	
+	// record the model predictions for the entire dataset
+	for (size_t student = 0; student < num_students; student++) {
+	
+		// define some references for convenience:
+		const vector<bool> & recall_sequence = recall_sequences.at(student);
+		const vector<size_t> & item_sequence = item_sequences.at(student);
+
+		// initialize p_hat
+		boost::unordered_map<size_t, double> p_hat;
+		for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
+
+		for (size_t trial = 0; trial < recall_sequence.size(); trial++) {
+
+			// define some variables for notational clarity
+			const bool did_recall = recall_sequence.at(trial);
+			const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
+			const struct bkt_parameters & skill_params = parameters.at(table_id);
+			const double skill_pi1 = skill_params.pi1;
+			const double skill_pi0 = skill_pi1 *  skill_params.prop0;
+			const double skill_mu = skill_params.mu;
+			const double cur_p_hat = p_hat.at(table_id);
+
+			pRT_samples[student][trial].push_back(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat); // record prediction
+
+			if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+			else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+		}
+	}
+}
+
+	
 // returns true if student studied any of the provided items
 bool MixtureWCRP::studied_any_of(const size_t student, const vector<size_t> & items) const {
 	for (vector<size_t>::const_iterator item_itr = items.begin(); item_itr != items.end(); item_itr++) {
@@ -286,7 +515,7 @@ void MixtureWCRP::draw_bkt_param_prior(struct bkt_parameters & params) const {
 	params.psi = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
 	params.mu = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
 	params.pi1 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
-	params.pi0 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
+	params.prop0 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
 }
 
 
@@ -379,7 +608,7 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 	// define some constants for notational clarity
 	const struct bkt_parameters & skill_params = parameters.at(table_id);
 	const double skill_pi1 = skill_params.pi1;
-	const double skill_pi0 = skill_pi1 *  skill_params.pi0;
+	const double skill_pi0 = skill_pi1 *  skill_params.prop0;
 	const double skill_mu = skill_params.mu;
 	const double skill_psi = skill_params.psi;
 
@@ -420,8 +649,7 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 
 // calculate the data log likelihood for the skill (table_id) across all students
 //   for each student s, only the part of the log likelihood occurring on or after first_exposures[s] is included in the calculation
-// for speed, this function uses each student's precomputed BKT sufficient statistic (init_p_hat) up to the first encounter of item
-// used by MixtureWCRP::gibbs_resample_skill
+// for speed, this function uses each student's precomputed forward state on the first encounter of item
 double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<size_t> & affected_students, const vector<size_t> & first_exposures, const vector< boost::unordered_map<size_t, double> > & init_p_hat) const {
 
 	// if non-existent table, return 0
@@ -432,7 +660,7 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 	// for convenience
 	const struct bkt_parameters & skill_params = parameters.at(table_id);
 	const double skill_pi1 = skill_params.pi1;
-	const double skill_pi0 = skill_pi1 *  skill_params.pi0;
+	const double skill_pi0 = skill_pi1 *  skill_params.prop0;
 	const double skill_mu = skill_params.mu;
 
 	for (size_t student_idx = 0; student_idx < affected_students.size(); student_idx++) {
@@ -477,73 +705,32 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 }
 
 
-// resample the skill assignment (table) for this item (customer)
-// see algorithm 8 from http://www.stat.purdue.edu/~rdutta/24.PDF
-void MixtureWCRP::gibbs_resample_skill(const size_t item) {
+// sets p_hat to the across-skill state right before the trial = first_exposure
+// used to reduce redundant computation during gibbs sampling
+void MixtureWCRP::cache_p_hat(const size_t student, const size_t end_trial, boost::unordered_map<size_t, double> & p_hat) const {
 
-	const size_t cur_table_id = seating_arrangement.at(item);
-	const vector<size_t> & affected_students = students_who_studied.at(item);
-	const vector<size_t> & first_exposures = all_first_encounters.at(item);
+	// define some references for convenience:
+	const vector<bool> & recall_sequence = recall_sequences.at(student);
+	const vector<size_t> & item_sequence = item_sequences.at(student);
 
-	// unassign the item's skill label
-	remove_item_from_table(item, cur_table_id);
+	// initialize p_hat
+	for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
 
-	// precompute each student's BKT sufficient statistic up to the first encounter of item
-	vector< boost::unordered_map<size_t, double> > p_hat(affected_students.size());
-	for (size_t student_idx = 0; student_idx < affected_students.size(); student_idx++) cache_p_hat(affected_students.at(student_idx), first_exposures.at(student_idx), p_hat[student_idx]);
+	for (size_t trial = 0; trial < end_trial; trial++) {
 
-	vector<double> data_lp_with_item, data_lp_without_item, seating_lp;
+		// define some constants for notational clarity
+		const bool did_recall = recall_sequence.at(trial);
+		const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
+		const struct bkt_parameters & skill_params = parameters.at(table_id);
+		const double skill_pi1 = skill_params.pi1;
+		const double skill_pi0 = skill_pi1 *  skill_params.prop0;
+		const double skill_mu = skill_params.mu;
+		const double cur_p_hat = p_hat.at(table_id);
+		const double one_minus_cur_p_hat = 1.0 - cur_p_hat;
 
-	// preallocate memory
-	const size_t final_size = extant_tables.size() + num_subsamples;
-	data_lp_with_item.reserve(final_size);
-	data_lp_without_item.reserve(final_size);
-	seating_lp.reserve(final_size);
-
-	// compute the data log likelihood (of affected students) for each extant skill with and without item being assigned to it
-	// also compute the log probability of sitting here
-	vector<size_t> keys;
-	keys.reserve(extant_tables.size());
-	for (set<size_t>::const_iterator table_itr = extant_tables.begin(); table_itr != extant_tables.end(); table_itr++) { // note: extant_tables won't change in this loop
-		// data likelihood; with
-		assign_item_to_table(item, *table_itr, false);
-		data_lp_with_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
-		
-		// data likelihood; without
-		remove_item_from_table(item, *table_itr);
-		data_lp_without_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
-		
-		// seating probability
-		const double K = compute_K(item, *table_itr, false);
-		seating_lp.push_back(log_old_table_probability(table_sizes.at(*table_itr), K, log_gamma, num_expert_provided_skills));
-
-		keys.push_back(*table_itr);
-	}
-
-	// use the precomputed marginal likelihoods for calculating the new seating prob
-	data_lp_with_item.insert(data_lp_with_item.end(), singleton_skill_data_lp.at(item).begin(), singleton_skill_data_lp.at(item).end());
-	data_lp_without_item.resize(data_lp_without_item.size() + num_subsamples, 0.0);
-	seating_lp.resize(seating_lp.size() + num_subsamples, log_new_table_probability(log_alpha_prime, log_gamma, num_expert_provided_skills) - log(1.0*num_subsamples));
-
-	assert(data_lp_with_item.size() == num_used_skills + num_subsamples);
-	assert(data_lp_without_item.size() == num_used_skills + num_subsamples);
-	assert(seating_lp.size() == num_used_skills + num_subsamples);
-	
-	// consider assigning every possible skill label to this item
-	vector<double> proportional_log_probs(seating_lp.size());
-	for (size_t event = 0; event < seating_lp.size(); event++) proportional_log_probs[event] = seating_lp.at(event) + data_lp_with_item.at(event) - data_lp_without_item.at(event);
-
-	// draw a new skill label
-	const size_t num_extant_tables = extant_tables.size();
-	const size_t drawn_event = (size_t) generator->sampleUnnormalizedDiscrete(proportional_log_probs);
-	if (drawn_event >= num_extant_tables) { // decided to sit at new table
-		assign_item_to_table(item, tables_ever_instantiated++, true); // sit down
-		const size_t chosen_subsample = drawn_event - num_extant_tables;
-		parameters[seating_arrangement.at(item)] = prior_samples.at(chosen_subsample); // assign parameters
-	}
-	else { // decided to sit at old table
-		const size_t table_id = keys.at(drawn_event);
-		assign_item_to_table(item, table_id, false);
+		// update
+		if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * one_minus_cur_p_hat) / (skill_pi1 * cur_p_hat + skill_pi0 * one_minus_cur_p_hat);
+		else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * one_minus_cur_p_hat) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * one_minus_cur_p_hat);
 	}
 }
 
@@ -592,7 +779,7 @@ double MixtureWCRP::full_data_log_likelihood(const bool is_training, size_t & tr
 	double ll = 0.0;
 	trials_included = 0;
 	for (size_t student = 0; student < num_students; student++) {
-		if ( (is_training && train_students.count(student)) || (!is_training && test_students.count(student))) {
+		if ( (is_training && train_students.count(student)) || (!is_training && !train_students.count(student))) {
 			size_t num_trials = 0;
 			ll += data_log_likelihood(student, 0, num_trials);
 			trials_included += num_trials;
@@ -607,89 +794,6 @@ double MixtureWCRP::data_log_likelihood(const vector<size_t> & students, const v
 	size_t n = 0;
 	for (size_t k = 0; k < students.size(); k++) ll += data_log_likelihood(students.at(k), first_exposures.at(k), n);
 	return ll;
-}
-
-
-void MixtureWCRP::record_sample(const size_t replication, const size_t test_fold, const size_t iter, const size_t burn, const bool infer_gamma, const double elapsed_time, const double train_ll, const double test_ll, const size_t train_n, const size_t test_n, const size_t num_skills, const double cur_seating_lp) {
-
-	// output some summary information
-	outfile_meta << replication << " " << test_fold << " " << iter << " " << infer_gamma << " " << elapsed_time << " " << train_ll << " " << test_ll << " " << train_n << " " << test_n << " " << log_gamma << " " << log_alpha_prime << " " << num_skills << " " << cur_seating_lp << endl;
-
-	if (iter >= burn) {
-		// output the model predictions for the dataset
-		for (size_t student = 0; student < num_students; student++) {
-			// define some references for convenience:
-			const vector<bool> & recall_sequence = recall_sequences.at(student);
-			const vector<size_t> & item_sequence = item_sequences.at(student);
-
-			// initialize p_hat
-			boost::unordered_map<size_t, double> p_hat;
-			for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
-
-			for (size_t trial = 0; trial < recall_sequence.size(); trial++) {
-
-				// define some variables for notational clarity
-				const bool did_recall = recall_sequence.at(trial);
-				const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
-				const struct bkt_parameters & skill_params = parameters.at(table_id);
-				const double skill_pi1 = skill_params.pi1;
-				const double skill_pi0 = skill_pi1 *  skill_params.pi0;
-				const double skill_mu = skill_params.mu;
-				const double cur_p_hat = p_hat.at(table_id);
-
-				pRT_samples[student][trial].push_back(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat); // record prediction
-
-				if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
-				else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
-			}
-		}
-	}
-}
-
-
-// append the current skill assignments to the file handle outfile_skills
-void MixtureWCRP::record_skill_assignments(const size_t replication, const size_t test_fold) {
-	
-	boost::unordered_map<size_t, int> skill_labels;
-	outfile_skills << replication << " " << test_fold << " ";
-	for (size_t item = 0; item < num_items; item++) {
-		const size_t table_id = seating_arrangement.at(item);
-		if (skill_labels.find(table_id) == skill_labels.end()) skill_labels[table_id] = skill_labels.size();
-		
-		outfile_skills << skill_labels.at(table_id);
-		if (item != num_items - 1) outfile_skills << " ";
-		else outfile_skills << endl;
-	}
-}
-
-
-// sets p_hat to the across-skill state right before the trial = first_exposure
-// used to reduce redundant computation during gibbs sampling
-void MixtureWCRP::cache_p_hat(const size_t student, const size_t end_trial, boost::unordered_map<size_t, double> & p_hat) const {
-
-	// define some references for convenience:
-	const vector<bool> & recall_sequence = recall_sequences.at(student);
-	const vector<size_t> & item_sequence = item_sequences.at(student);
-
-	// initialize p_hat
-	for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
-
-	for (size_t trial = 0; trial < end_trial; trial++) {
-
-		// define some constants for notational clarity
-		const bool did_recall = recall_sequence.at(trial);
-		const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
-		const struct bkt_parameters & skill_params = parameters.at(table_id);
-		const double skill_pi1 = skill_params.pi1;
-		const double skill_pi0 = skill_pi1 *  skill_params.pi0;
-		const double skill_mu = skill_params.mu;
-		const double cur_p_hat = p_hat.at(table_id);
-		const double one_minus_cur_p_hat = 1.0 - cur_p_hat;
-
-		// update
-		if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * one_minus_cur_p_hat) / (skill_pi1 * cur_p_hat + skill_pi0 * one_minus_cur_p_hat);
-		else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * one_minus_cur_p_hat) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * one_minus_cur_p_hat);
-	}
 }
 
 
@@ -713,7 +817,7 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
 		const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
 		const struct bkt_parameters & skill_params = parameters.at(table_id);
 		const double skill_pi1 = skill_params.pi1;
-		const double skill_pi0 = skill_pi1 *  skill_params.pi0;
+		const double skill_pi0 = skill_pi1 *  skill_params.prop0;
 		const double skill_mu = skill_params.mu;
 		const double cur_p_hat = p_hat.at(table_id);
 
@@ -812,113 +916,5 @@ double MixtureWCRP::slice_resample_wcrp_param(double * param, const double cur_s
 }
 
 
-void MixtureWCRP::run_mcmc(const string outfilename, const size_t replication, const size_t test_fold, const size_t num_iterations, const size_t burn, const bool infer_gamma, const bool infer_alpha_prime, const bool dump_skills) {
-
-	const string outfilename1 = outfilename + "_meta.txt";
-	const string outfilename2 = outfilename + "_predictions.txt";
-	const string outfilename3 = outfilename + "_skills.txt";
-	if (replication == 0 && test_fold == 0) { // create new file
-		outfile_meta.open(outfilename1.c_str(), ofstream::out);
-		outfile_predictions.open(outfilename2.c_str(), ofstream::out);
-		if (dump_skills) outfile_skills.open(outfilename3.c_str(), ofstream::out);
-	}
-	else { // append to file
-		outfile_meta.open(outfilename1.c_str(), ofstream::app);
-		outfile_predictions.open(outfilename2.c_str(), ofstream::app);
-		if (dump_skills) outfile_skills.open(outfilename3.c_str(), ofstream::app);
-	}
-
-	for (size_t iter = 0; iter < num_iterations; iter++) {
-		cout << "REPLICATION " << (replication+1) << ", TEST FOLD " << (test_fold+1) << ", ITERATION " << (iter+1) << " OF " << num_iterations << endl;
-
-		clock_t begin = clock();
-		
-		// update alpha' and gamma
-		cout << "  resampling WCRP hyperparameters" << endl;
-		double cur_seating_lp = log_seating_prob();
-		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
-			if (!use_expert_labels && infer_alpha_prime) cur_seating_lp = slice_resample_wcrp_param(&log_alpha_prime, cur_seating_lp, -10, 11, .25, log_logalphaprime_prior_density);
-
-			// update gamma
-			if (infer_gamma) cur_seating_lp = slice_resample_wcrp_param(&log_gamma, cur_seating_lp, -8, 0, .25, log_loggamma_prior_density);
-		}
-		
-		// update the BKT parameters for each skill
-		cout << "  resampling skill parameters" << endl;
-		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
-			for (boost::unordered_map<size_t, struct bkt_parameters>::iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) {
-				const size_t table_id = table_itr->first;
-
-				// figure out which items are assigned to this skill
-				vector<size_t> items_assigned_to_skill;
-				for (size_t item = 0; item < num_items; item++) {
-					if (seating_arrangement.at(item) == table_id) items_assigned_to_skill.push_back(item);
-				}
-
-				// figure out which students would be affected by a change in this skill's BKT parameterization
-				vector<size_t> students_to_include, first_exposures;
-				for (size_t student = 0; student < num_students; student++) {
-					if (train_students.count(student) && studied_any_of(student, items_assigned_to_skill)) {
-						students_to_include.push_back(student);
-						size_t min_val = item_sequences.at(student).size();
-						for (vector<size_t>::const_iterator item_itr = items_assigned_to_skill.begin(); item_itr != items_assigned_to_skill.end(); item_itr++) {
-							if (first_encounter.at(student).at(*item_itr) < min_val) min_val = first_encounter.at(student).at(*item_itr);
-						}
-						first_exposures.push_back(min_val);
-					}
-				}
-
-				// update the skill's BKT parameters in random order
-				vector<double * > param_ptrs;
-				param_ptrs.push_back(&(table_itr->second.psi));
-				param_ptrs.push_back(&(table_itr->second.mu));
-				param_ptrs.push_back(&(table_itr->second.pi1));
-				param_ptrs.push_back(&(table_itr->second.pi0));
-				generator->shuffle(param_ptrs);
-				double cur_ll = skill_log_likelihood(table_id, students_to_include, first_exposures);
-				for (vector<double *>::iterator param_itr = param_ptrs.begin(); param_itr != param_ptrs.end(); param_itr++) {
-					cur_ll = slice_resample_bkt_parameter(table_id, *param_itr, students_to_include, first_exposures, cur_ll);
-				}
-			}
-		}
-
-		// update the CRP seating arrangement
-		if (!use_expert_labels) {
-			cout << "  resampling skill assignments" << endl;
-			generator->shuffle(all_items);
-			for (vector<size_t>::const_iterator item_itr = all_items.begin(); item_itr != all_items.end(); item_itr++) gibbs_resample_skill(*item_itr);
-		}
-		else cout << "  skipping resampling the skill assignments because we're using the expert labels" << endl;
-
-		clock_t end = clock();
-  		double elapsed_ms = (end - begin)/(CLOCKS_PER_SEC/1000.0);
-		
-		////////////////////////////////////
-		size_t train_n, test_n;
-		const double train_ll = full_data_log_likelihood(true, train_n);
-		const double test_ll = full_data_log_likelihood(false, test_n);
-
-		if (!use_expert_labels) cout << "  log_alpha_prime = " << log_alpha_prime << " (alpha' = " << exp(log_alpha_prime) << ")" << endl;
-		cout << "  log_gamma = " << log_gamma << " (gamma = " << exp(log_gamma) << ")" << endl;
-		cout << "  TRAINING STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-train_ll / train_n) << endl;
-		cout << "  HELDOUT STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-test_ll / test_n) << endl;
-		cout << "  iteration completed in " << elapsed_ms / 60000.0 << " minutes." << endl;
-		cout << "  current number of skills: " << num_used_skills << endl;
-		cout << endl;
-		/////////////////////////////////////
-
-		record_sample(replication, test_fold, iter, burn, infer_gamma, elapsed_ms / 60000.0, train_ll, test_ll, train_n, test_n, num_used_skills, log_seating_prob());
-		if (dump_skills && iter >= burn) record_skill_assignments(replication, test_fold);
-	}
-
-	// write the posterior expectation for each prediction out to file
-	for (size_t student = 0; student < num_students; student++) {
-		const bool was_heldout = test_students.count(student);
-		for (size_t trial = 0; trial < pRT_samples.at(student).size(); trial++) {
-			outfile_predictions << replication << " " << test_fold << " " << was_heldout << " " << recall_sequences.at(student).at(trial) << " " << vector_mean(pRT_samples.at(student).at(trial)) << endl;
-		}
-	}
-	
-}
 
 #endif

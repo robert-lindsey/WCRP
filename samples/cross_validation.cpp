@@ -31,6 +31,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using namespace std;
 
+
 // reads a tab delimited file with the columns: student id, item id, skill id, recall success
 // all ids are assumed to start at 0 and be contiguous
 void load_dataset(const char * filename, vector<size_t> & provided_skill_assignments, vector< vector<bool> > & recall_sequences, vector< vector<size_t> > & item_sequences, size_t & num_students, size_t & num_items, size_t & num_skills) {
@@ -107,17 +108,17 @@ int main(int argc, char ** argv) {
 
 	namespace po = boost::program_options;
 
-	string datafile, outfile, foldfile;
+	string datafile, predfile, foldfile;
 	int tmp_num_iterations, tmp_burn, tmp_num_subsamples;
 	double init_beta, init_alpha_prime;
-	bool infer_beta, infer_alpha_prime, dump_skills;
+	bool infer_beta, infer_alpha_prime;
 
 	// parse the command line arguments
 	po::options_description desc("Allowed options");
 	desc.add_options()
         ("help", "print help message")
 		("datafile", po::value<string>(&datafile), "train the model on the given data file")
-		("outfile", po::value<string>(&outfile), "put results in this file")
+		("predfile", po::value<string>(&predfile), "file to put the posterior expected probability of recall for the heldout data")
 		("foldfile", po::value<string>(&foldfile), "file with the training / test splits")
 		("init_beta", po::value<double>(&init_beta), "initial value of beta")
 		("fixed_alpha_prime", po::value<double>(&init_alpha_prime), "fixed value of alpha'")
@@ -125,7 +126,6 @@ int main(int argc, char ** argv) {
 		("num_iterations", po::value<int>(&tmp_num_iterations)->default_value(200), "number of iterations to run")
 		("burn", po::value<int>(&tmp_burn)->default_value(100), "number of iterations to discard")
 		("num_subsamples", po::value<int>(&tmp_num_subsamples)->default_value(2000), "number of samples to use when approximating marginal likelihood of new tables")
-		("dump_skills", "save the skill assignments too")
 	;
 
 	po::variables_map vm;
@@ -137,16 +137,14 @@ int main(int argc, char ** argv) {
 		return EXIT_SUCCESS;
 	}
 
-	infer_beta = vm.count("infer_beta");
-	dump_skills = vm.count("dump_skills");
 	if (vm.count("fixed_alpha_prime")) {
 		assert(init_alpha_prime >= 0);
-		infer_alpha_prime = 0;
+		infer_alpha_prime = false;
 		cout << "the code will keep alpha' fixed at " << init_alpha_prime << endl;
 	}
 	else {
 		init_alpha_prime = -1;
-		infer_alpha_prime = 1;
+		infer_alpha_prime = true;
 		cout << "the code will automatically infer the value of alpha'" << endl;
 	}
 	
@@ -156,6 +154,7 @@ int main(int argc, char ** argv) {
 
 	Random * generator = new Random(time(NULL));
 
+	infer_beta = vm.count("infer_beta");
 	if (infer_beta) cout << "the code will automatically infer the value of beta" << endl;
 	else cout << "the code will keep beta fixed at " << init_beta << endl;
 	
@@ -165,34 +164,45 @@ int main(int argc, char ** argv) {
 
 	// load the dataset
 	vector<size_t> provided_skill_assignments;
-	vector< vector<bool> > recall_sequences;    // recall_sequences[student][trial # i]  = recall success or failure of the ith trial we have for the student
+	vector< vector<bool> > recall_sequences; // recall_sequences[student][trial # i]  = recall success or failure of the ith trial we have for the student
 	vector< vector<size_t> > item_sequences; // item_sequences[student][trial # i] = item corresponding to the ith trial we have for the student
 	size_t num_students, num_items, num_skills_dataset;
 	load_dataset(datafile.c_str(), provided_skill_assignments, recall_sequences, item_sequences, num_students, num_items, num_skills_dataset);
 	assert(num_students > 0 && num_items > 0);
 
-	// load the training / test splits
+	// load the training-test splits
 	vector<vector<size_t> > fold_nums;
 	size_t num_folds;
 	load_splits(foldfile.c_str(), fold_nums, num_folds, num_students);
 	
+	// create the file where we'll put our recall probability predictions 
+	ofstream out_predictions(predfile.c_str(), ofstream::out);
+	out_predictions << "replication\tfold\twas_heldout\tstudent_recalled\tprob_recall" << endl; // write the file header
+	
 	for (size_t replication = 0; replication < fold_nums.size(); replication++) {
 		for (size_t test_fold = 0; test_fold < num_folds; test_fold++) {
 		
-			set<size_t> train_students, test_students;
+			// figure out which students are in the training set for this replication-fold
+			set<size_t> train_students; 
 			for (size_t s = 0; s < num_students; s++) {
-				if (fold_nums.at(replication).at(s) == test_fold && num_folds>1) test_students.insert(s);
-				else train_students.insert(s);
+				if (fold_nums.at(replication).at(s) != test_fold || num_folds<=1) train_students.insert(s);
 			}
-
-			if (num_folds > 1) assert(test_students.size() > 0);
-			assert(train_students.size() > 0);
+			assert(!train_students.empty());
 			
 			// create the model
-			MixtureWCRP model(generator, train_students, test_students, recall_sequences, item_sequences, provided_skill_assignments, init_beta, init_alpha_prime, num_students, num_items, num_subsamples);
+			MixtureWCRP model(generator, train_students, recall_sequences, item_sequences, provided_skill_assignments, init_beta, init_alpha_prime, num_students, num_items, num_subsamples);
 
 			// run the sampler
-			model.run_mcmc(outfile, replication, test_fold, num_iterations, burn, infer_beta, infer_alpha_prime, dump_skills);
+			model.run_mcmc(num_iterations, burn, infer_beta, infer_alpha_prime);
+			
+			// save the posterior expected recall probability for each student-trial to file
+			for (size_t student = 0; student < num_students; student++) {
+				const bool was_heldout = !train_students.count(student);
+				for (size_t trial = 0; trial < recall_sequences.at(student).size(); trial++) {
+					const double mean_prob = model.get_estimated_recall_prob(student, trial);
+					out_predictions << replication << "\t" << test_fold << "\t" << was_heldout << "\t" << recall_sequences.at(student).at(trial) << "\t" << mean_prob << endl;
+				}
+			}
 		}
 	}
 
