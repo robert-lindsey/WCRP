@@ -48,7 +48,7 @@ class MixtureWCRP {
 
 	~MixtureWCRP();
 
-	void run_mcmc(const string outfilename, const size_t num_iterations, const size_t burn, const bool infer_gamma, const bool infer_alpha_prime);
+	void run_mcmc(const size_t num_iterations, const size_t burn, const bool infer_gamma, const bool infer_alpha_prime);
 	
 	// returns the expected posterior probability that the student responds correctly to the trial number 
 	double get_estimated_recall_prob(const size_t student, const size_t trial) const;

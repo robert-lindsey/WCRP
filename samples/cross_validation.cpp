@@ -117,14 +117,14 @@ int main(int argc, char ** argv) {
 	po::options_description desc("Allowed options");
 	desc.add_options()
         ("help", "print help message")
-		("datafile", po::value<string>(&datafile), "train the model on the given data file")
-		("predfile", po::value<string>(&predfile), "file to put the posterior expected probability of recall for the heldout data")
-		("foldfile", po::value<string>(&foldfile), "file with the training / test splits")
-		("init_beta", po::value<double>(&init_beta), "initial value of beta")
-		("fixed_alpha_prime", po::value<double>(&init_alpha_prime), "fixed value of alpha'")
-		("infer_beta", "infer the value of beta")
-		("num_iterations", po::value<int>(&tmp_num_iterations)->default_value(200), "number of iterations to run")
-		("burn", po::value<int>(&tmp_burn)->default_value(100), "number of iterations to discard")
+		("datafile", po::value<string>(&datafile), "(required) file containing the student recall data")
+		("foldfile", po::value<string>(&foldfile), "(required) file with the training-test splits")
+		("predfile", po::value<string>(&predfile), "(required) file to put the posterior expected probability of recall for the heldout data")
+		("num_iterations", po::value<int>(&tmp_num_iterations)->default_value(2000), "(optional) number of iterations to run. i highly recommend you tune this parameter")
+		("burn", po::value<int>(&tmp_burn)->default_value(1000), "(optional) number of iterations to discard. i highly recommend you tune this parameter")
+		("init_beta", po::value<double>(&init_beta)->default_value(.5), "(optional) initial value of beta")
+		("infer_beta", "(optional) try to automatically infer the value of beta. if not provided, beta will be fixed at init_beta")
+		("fixed_alpha_prime", po::value<double>(&init_alpha_prime), "(optional) fix alpha' at the provided value")
 		("num_subsamples", po::value<int>(&tmp_num_subsamples)->default_value(2000), "number of samples to use when approximating marginal likelihood of new tables")
 	;
 

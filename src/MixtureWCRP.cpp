@@ -255,8 +255,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 
 // object destructor
 MixtureWCRP::~MixtureWCRP() {
-	// close any open file handles 
-	if (outfile_meta.is_open()) outfile_meta.close();
+
 }
 
 
@@ -457,7 +456,7 @@ void MixtureWCRP::gibbs_resample_skill(const size_t item) {
 void MixtureWCRP::record_sample(const double train_ll) {
 
 	// record the current training data log likelihood
-	train_ll_samples(train_ll);
+	train_ll_samples.push_back(train_ll);
 
 	// record the current partitioning of items into skills 	
 	boost::unordered_map<size_t, int> skill_labels;

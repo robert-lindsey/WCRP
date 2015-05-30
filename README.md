@@ -4,7 +4,9 @@ Weighted Chinese Restaurant Process model for inferring skill labels in Bayesian
 
 Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
 
-## Installation
+TODO: high level overview 
+
+## Compiling
 
 WCRP depends on [Boost](http://www.boost.org/) and [GNU GSL](http://www.gnu.org/software/gsl/).
 
@@ -15,11 +17,19 @@ To compile the code, run
     cmake ..
     make
 
+## Data Format 
+
+TODO: Description of how the data need to be formatted. 
+
+
 ## Usage 
+
+TODO: the following is outdated but will be fixed soon: 
+
 
 To view the available command line options, type
 
-    ./bin/infer_skills
+    ./bin/cross_validation
 
 The program outputs three files:
 * The meta.txt file contains some summary information about the MCMC sampler. There should be one line per sampling iteration. See MixtureWCRP::record\_sample. If everything is working on your dataset, you should see the training log likelihood ("train\_ll") increase and then ultimately hover around some asymptote. 
