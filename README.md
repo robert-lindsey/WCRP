@@ -11,10 +11,15 @@ WCRP depends on [Boost](http://www.boost.org/) and [GNU GSL](http://www.gnu.org/
 To compile the code, run 
 
     mkdir build
+    cd build
     cmake ..
     make
 
 ## Usage 
+
+To view the available command line options, type
+
+    ./bin/infer_skills
 
 The program outputs three files:
 * The meta.txt file contains some summary information about the MCMC sampler. There should be one line per sampling iteration. See MixtureWCRP::record\_sample. If everything is working on your dataset, you should see the training log likelihood ("train\_ll") increase and then ultimately hover around some asymptote. 
@@ -26,7 +31,8 @@ Other comments:
 * The program reads datasets in whitespace-delimited format with the columns: student id, item id, skill id, recall success (1 or 0). All the ids are assumed to start at 0. I've included some datasets as an example. 
 * If you don't have any expert provided skill assignments, you can just use dummy values for the skill id. There's a program option for init\_beta and infer\_beta. If init\_beta is set to 0.0 and you do not set infer\_beta, the code ignores the provided skill values by reverting to a CRP. 
 * The skills.txt file is only created if you call the program with the --dump\_skills argument. 
-* The code may seem overly complicated because I do some tricks to speed up the Gibbs sampling. 
+
+## Implementation Notes
 
 
 
