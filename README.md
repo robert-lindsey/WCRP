@@ -2,11 +2,11 @@
 
 Weighted Chinese Restaurant Process model for inferring skill labels in Bayesian Knowledge Tracing
 
-Check out the [paper](http://www.cs.colorado.edu/~mozer/Research/Selected%20Publications/reprints/LindseyKhajahMozer2014.pdf) for more information. 
+Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
 
 ## Installation
 
-WCRP depends on Boost and GNU GSL.
+WCRP depends on [Boost](http://www.boost.org/) and [GNU GSL](http://www.gnu.org/software/gsl/).
 
 To compile the code, run 
 
@@ -24,10 +24,13 @@ This code is released under the [MIT License](https://github.com/robert-lindsey/
 
 Please cite our paper in your publications if it helps your research: 
 
-    @article{lindsey2014,
-      Author = {Lindsey, Robert and Khajah, Mohammad and Mozer, Michael},
-      Journal = {Neural Information Processing Systems},
-      Title = {Automatic Discovery of Cognitive Skills to Improve the Prediction of Student Learning},
-      Year = {2014}
+    @incollection{lindsey2014,
+      title = {Automatic Discovery of Cognitive Skills to Improve the Prediction of Student Learning},
+      author = {Lindsey, Robert V and Khajah, Mohammad and Mozer, Michael C},
+      booktitle = {Advances in Neural Information Processing Systems 27},
+      editor = {Z. Ghahramani and M. Welling and C. Cortes and N.D. Lawrence and K.Q. Weinberger},
+      pages = {1386--1394},
+      year = {2014},
+      publisher = {Curran Associates, Inc.},
     }
 
