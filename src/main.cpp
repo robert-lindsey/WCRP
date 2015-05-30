@@ -1,3 +1,28 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2015 Robert Lindsey
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
 #ifndef MAIN_CPP
 #define MAIN_CPP
 
@@ -8,7 +33,7 @@ using namespace std;
 
 // reads a tab delimited file with the columns: student id, item id, skill id, recall success
 // all ids are assumed to start at 0 and be contiguous
-void load_dataset(const char * filename, vector<size_t> & provided_skill_assignments, vector< vector<bool> > & recall_sequences, vector< vector<size_t> > & problem_sequences, size_t & num_students, size_t & num_items, size_t & num_skills) {
+void load_dataset(const char * filename, vector<size_t> & provided_skill_assignments, vector< vector<bool> > & recall_sequences, vector< vector<size_t> > & item_sequences, size_t & num_students, size_t & num_items, size_t & num_skills) {
 
 	num_students=0, num_items=0, num_skills=0;
 	size_t student, item, skill, recall;
@@ -31,13 +56,13 @@ void load_dataset(const char * filename, vector<size_t> & provided_skill_assignm
 	// initialize
 	provided_skill_assignments.resize(num_items, -1); // skill_assignments[item index] = skill index
 	recall_sequences.resize(num_students);
-	problem_sequences.resize(num_students);
+	item_sequences.resize(num_students);
 
 	// read the dataset
 	in.open(filename);
 	while (in >> student >> item >> skill >> recall) {
 		recall_sequences[student].push_back(recall);
-		problem_sequences[student].push_back(item);
+		item_sequences[student].push_back(item);
 		provided_skill_assignments[item] = skill;
 	}
 	in.close();
@@ -90,7 +115,7 @@ int main(int argc, char ** argv) {
 	// parse the command line arguments
 	po::options_description desc("Allowed options");
 	desc.add_options()
-        	("help", "print help message")
+        ("help", "print help message")
 		("datafile", po::value<string>(&datafile), "train the model on the given data file")
 		("outfile", po::value<string>(&outfile), "put results in this file")
 		("foldfile", po::value<string>(&foldfile), "file with the training / test splits")
@@ -141,9 +166,9 @@ int main(int argc, char ** argv) {
 	// load the dataset
 	vector<size_t> provided_skill_assignments;
 	vector< vector<bool> > recall_sequences;    // recall_sequences[student][trial # i]  = recall success or failure of the ith trial we have for the student
-	vector< vector<size_t> > problem_sequences; // problem_sequences[student][trial # i] = item corresponding to the ith trial we have for the student
+	vector< vector<size_t> > item_sequences; // item_sequences[student][trial # i] = item corresponding to the ith trial we have for the student
 	size_t num_students, num_items, num_skills_dataset;
-	load_dataset(datafile.c_str(), provided_skill_assignments, recall_sequences, problem_sequences, num_students, num_items, num_skills_dataset);
+	load_dataset(datafile.c_str(), provided_skill_assignments, recall_sequences, item_sequences, num_students, num_items, num_skills_dataset);
 	assert(num_students > 0 && num_items > 0);
 
 	// load the training / test splits
@@ -164,7 +189,7 @@ int main(int argc, char ** argv) {
 			assert(train_students.size() > 0);
 			
 			// create the model
-			MixtureWCRP model(generator, train_students, test_students, recall_sequences, problem_sequences, provided_skill_assignments, init_beta, init_alpha_prime, num_students, num_items, num_subsamples);
+			MixtureWCRP model(generator, train_students, test_students, recall_sequences, item_sequences, provided_skill_assignments, init_beta, init_alpha_prime, num_students, num_items, num_subsamples);
 
 			// run the sampler
 			model.run_mcmc(outfile, replication, test_fold, num_iterations, burn, infer_beta, infer_alpha_prime, dump_skills);

@@ -1,10 +1,3 @@
-# Script found on KDE-edu list
-# Permission obtained from Jan Woetzel to use under a BSD-style license.
-#
-# Redistribution and use is allowed according to the terms of the BSD license.
-# For details see the accompanying COPYING-CMAKE-SCRIPTS file.
-#
-# Look for the header file
 # Try to find gnu scientific library GSL
 # See
 # http://www.gnu.org/software/gsl/  and

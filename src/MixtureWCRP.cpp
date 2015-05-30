@@ -1,3 +1,28 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2015 Robert Lindsey
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
 #ifndef MIXTURE_WCRP_CPP
 #define MIXTURE_WCRP_CPP
 
@@ -29,7 +54,6 @@ double log_loggamma_prior_density(const double x) {
 double log_logalphaprime_prior_density(const double log_alpha_prime) {
 	const double alpha_prime = exp(log_alpha_prime);
 	return (HYPER_AP1 - 1.0) * log_alpha_prime - alpha_prime / HYPER_AP2;
-    //return 0;
 }
 
 
@@ -60,8 +84,8 @@ double MixtureWCRP::compute_K(const size_t item, const size_t table_id, const bo
 	const size_t end_idx = (generative_mode) ? item : num_items;
 	const size_t item_expert_label = provided_skill_assignments.at(item);
 
-	// for each expert skill id that occurs at this table, count the number of questions at this table with that id, n_k^j, for all k
-	boost::unordered_map<size_t, int> counts; // mapping b/w expert skill id => # of questions at this table with that id
+	// for each expert skill id that occurs at this table, count the number of items at this table with that id, n_k^j, for all k
+	boost::unordered_map<size_t, int> counts; // mapping b/w expert skill id => # of items at this table with that id
 
 	int max_count = 0; 
 	for (size_t other_item = 0; other_item < end_idx; other_item++) {
@@ -91,18 +115,19 @@ MixtureWCRP::MixtureWCRP(Random * generator,
                          const set<size_t> & train_students, 
                          const set<size_t> & test_students, 
                          const vector< vector<bool> > & recall_sequences, 
-                         const vector< vector<size_t> > & problem_sequences, 
+                         const vector< vector<size_t> > & item_sequences, 
                          const vector<size_t> & provided_skill_assignments, 
                          const double beta, 
                          const double init_alpha_prime, 
                          const size_t num_students, 
                          const size_t num_items, 
                          const size_t num_subsamples) :
+                         
  generator(generator), 
  train_students(train_students), 
  test_students(test_students), 
  recall_sequences(recall_sequences), 
- problem_sequences(problem_sequences), 
+ item_sequences(item_sequences), 
  provided_skill_assignments(provided_skill_assignments), 
  num_students(num_students), 
  num_items(num_items), 
@@ -111,7 +136,8 @@ MixtureWCRP::MixtureWCRP(Random * generator,
  num_used_skills(0), 
  tables_ever_instantiated(UNASSIGNED+1) {
 
-        const double gamma = 1.0 - beta; 
+	// for legacy reasons, we define gamma = 1.0 - beta and do inference on log_gamma 
+	const double gamma = 1.0 - beta; 
 
 	assert(!train_students.empty() );
 	assert(!provided_skill_assignments.empty());
@@ -126,17 +152,17 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 	
 	// to avoid unnecessary work during MCMC, for each student-item pair, figure out the trial index it was first studied
 	first_encounter.resize(num_students);
-	problem_and_recall_sequences.resize(num_students);
+	item_and_recall_sequences.resize(num_students);
 	trials_studied.resize(num_students);
 	for (size_t student = 0; student < num_students; student++) {
-		first_encounter[student].resize(num_items, problem_sequences.at(student).size());
-		problem_and_recall_sequences[student].resize(problem_sequences.at(student).size());
+		first_encounter[student].resize(num_items, item_sequences.at(student).size());
+		item_and_recall_sequences[student].resize(item_sequences.at(student).size());
 		trials_studied[student].resize(num_items);
-		for (size_t trial = 0; trial < problem_sequences.at(student).size(); trial++) {
-			const size_t item = problem_sequences.at(student).at(trial);
+		for (size_t trial = 0; trial < item_sequences.at(student).size(); trial++) {
+			const size_t item = item_sequences.at(student).at(trial);
 			assert(item < num_items);
 			first_encounter[student][item] = min(trial, first_encounter.at(student).at(item));
-			problem_and_recall_sequences[student][trial] = make_pair(item, recall_sequences.at(student).at(trial));
+			item_and_recall_sequences[student][trial] = make_pair(item, recall_sequences.at(student).at(trial));
 			trials_studied[student][item].push_back(trial);
 		}
 	}
@@ -150,8 +176,8 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 		pRT_samples[student].resize(recall_sequences.at(student).size());
 		ever_studied[student].resize(num_items, false);
 		if (train_students.count(student)) {
-			for (size_t trial = 0; trial < problem_sequences.at(student).size(); trial++) {
-				const size_t item = problem_sequences.at(student).at(trial);
+			for (size_t trial = 0; trial < item_sequences.at(student).size(); trial++) {
+				const size_t item = item_sequences.at(student).at(trial);
 				ever_studied[student][item] = true;
 				provided_skill_totals[provided_skill_assignments.at(item)] += recall_sequences.at(student).at(trial);
 				provided_skill_counts[provided_skill_assignments.at(item)]++;
@@ -191,13 +217,12 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 	}
 	tables_ever_instantiated += num_expert_provided_skills + 1; // +1 necessary?
 	
-	
+	// sanity check
 	size_t num_missing = 0;
 	for (size_t item = 0; item < num_items; item++) {
 		if (all_first_encounters.at(item).empty()) num_missing++;
 	}
 	if (num_missing > 0) cerr << "warning: " << num_missing << " of " << num_items << " items have no training data" << endl;
-
 
 	// precompute the marginal likelihood of each item if it were a singleton skill
 	if (!use_expert_labels) {
@@ -237,16 +262,18 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 }
 
 
+// object destructor
 MixtureWCRP::~MixtureWCRP() {
+	// close any open file handles 
 	if (outfile_meta.is_open()) outfile_meta.close();
 	if (outfile_predictions.is_open()) outfile_predictions.close();
 	if (outfile_skills.is_open()) outfile_skills.close();
 }
 
 
-// returns true if student studied any of the provided questions
-bool MixtureWCRP::studied_any_of(const size_t student, const vector<size_t> & questions) const {
-	for (vector<size_t>::const_iterator item_itr = questions.begin(); item_itr != questions.end(); item_itr++) {
+// returns true if student studied any of the provided items
+bool MixtureWCRP::studied_any_of(const size_t student, const vector<size_t> & items) const {
+	for (vector<size_t>::const_iterator item_itr = items.begin(); item_itr != items.end(); item_itr++) {
 		if (ever_studied.at(student).at(*item_itr)) return true;
 	}
 	return false;
@@ -343,7 +370,8 @@ bool MixtureWCRP::remove_item_from_table(const size_t item, const size_t table_i
 }
 
 
-// only used in updating BKT parameters. no caching.
+// calculate the data log likelihood for the skill (table_id) across all students
+// this version of the function is only used in updating BKT parameters
 double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<size_t> & affected_students, const vector<size_t> & first_exposures) const {
 
 	double skill_log_lik = 0.0;
@@ -355,22 +383,24 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 	const double skill_mu = skill_params.mu;
 	const double skill_psi = skill_params.psi;
 
+	// for each student who ever practiced this skill
 	for (size_t k = 0; k < affected_students.size(); k++) {
 
 		const size_t student = affected_students.at(k);
 		const size_t start_trial = first_exposures.at(k);
 		double student_skill_log_lik = 0.0;
 
-		const vector< pair<size_t, bool> > & recall_problems = problem_and_recall_sequences.at(student);
+		const vector< pair<size_t, bool> > & recall_items = item_and_recall_sequences.at(student);
 		double cur_p_hat = skill_psi;
 
+		// for each trial of this skill
 		for (vector<size_t>::const_iterator trial_idx_itr = trial_lookup.at(table_id).at(student).begin(); trial_idx_itr != trial_lookup.at(table_id).at(student).end(); trial_idx_itr++) {
-			const pair<size_t, bool> & trial_pair = recall_problems.at(*trial_idx_itr);
-			if (trial_pair.second) {
+			const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
+			if (trial_pair.second) { // the student responded correctly
 				if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
 				cur_p_hat = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
 			}
-			else {
+			else { // the student responded incorrectly
 				if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
 				cur_p_hat = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
 			}
@@ -388,6 +418,10 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 }
 
 
+// calculate the data log likelihood for the skill (table_id) across all students
+//   for each student s, only the part of the log likelihood occurring on or after first_exposures[s] is included in the calculation
+// for speed, this function uses each student's precomputed BKT sufficient statistic (init_p_hat) up to the first encounter of item
+// used by MixtureWCRP::gibbs_resample_skill
 double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<size_t> & affected_students, const vector<size_t> & first_exposures, const vector< boost::unordered_map<size_t, double> > & init_p_hat) const {
 
 	// if non-existent table, return 0
@@ -414,17 +448,18 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 		double student_skill_log_lik = 0.0;
 
 		// define some references for convenience:
-		const vector< pair<size_t, bool> > & recall_problems = problem_and_recall_sequences.at(student);
+		const vector< pair<size_t, bool> > & recall_items = item_and_recall_sequences.at(student);
 		double cur_p_hat = init_p_hat.at(student_idx).at(table_id);
 
+		// for each trial of this skill
 		for (vector<size_t>::const_iterator trial_idx_itr = trial_lookup.at(table_id).at(student).begin(); trial_idx_itr != trial_lookup.at(table_id).at(student).end(); trial_idx_itr++) {
 			if (*trial_idx_itr >= start_trial) {
-				const pair<size_t, bool> & trial_pair = recall_problems.at(*trial_idx_itr);
-				if (trial_pair.second) {
+				const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
+				if (trial_pair.second) { // the student responded correctly
 					student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
 					cur_p_hat = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
 				}
-				else {
+				else { // the student responded incorrectly
 					student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
 					cur_p_hat = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
 				}
@@ -442,8 +477,8 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 }
 
 
-// resample the skill assignment for this item
-// algorithm 8 from http://www.stat.purdue.edu/~rdutta/24.PDF
+// resample the skill assignment (table) for this item (customer)
+// see algorithm 8 from http://www.stat.purdue.edu/~rdutta/24.PDF
 void MixtureWCRP::gibbs_resample_skill(const size_t item) {
 
 	const size_t cur_table_id = seating_arrangement.at(item);
@@ -473,9 +508,11 @@ void MixtureWCRP::gibbs_resample_skill(const size_t item) {
 		// data likelihood; with
 		assign_item_to_table(item, *table_itr, false);
 		data_lp_with_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
+		
 		// data likelihood; without
 		remove_item_from_table(item, *table_itr);
 		data_lp_without_item.push_back(skill_log_likelihood(*table_itr, affected_students, first_exposures, p_hat));
+		
 		// seating probability
 		const double K = compute_K(item, *table_itr, false);
 		seating_lp.push_back(log_old_table_probability(table_sizes.at(*table_itr), K, log_gamma, num_expert_provided_skills));
@@ -511,7 +548,8 @@ void MixtureWCRP::gibbs_resample_skill(const size_t item) {
 }
 
 
-// return the log joint probability of this dd-CRP seating arrangement
+// return the log joint probability of this WCRP seating arrangement
+// TODO: clean up
 double MixtureWCRP::log_seating_prob() const {
 
 	double log_prob = 0.0;
@@ -524,7 +562,7 @@ double MixtureWCRP::log_seating_prob() const {
 		proportional_probs.reserve(table_counts_so_far.size() + 1);
 		bool chose_old = false;
 
-		// figure out which tables exist if only questions 0...item - 1 have sat down
+		// figure out which tables exist if only items 0...item - 1 have sat down
 		for (boost::unordered_map<size_t, size_t>::const_iterator table_itr = table_counts_so_far.begin(); table_itr != table_counts_so_far.end(); table_itr++) {
 			const double K = compute_K(item, table_itr->first, true);
 			const double prob = exp(log_old_table_probability(table_itr->second, K, log_gamma, num_expert_provided_skills));
@@ -582,7 +620,7 @@ void MixtureWCRP::record_sample(const size_t replication, const size_t test_fold
 		for (size_t student = 0; student < num_students; student++) {
 			// define some references for convenience:
 			const vector<bool> & recall_sequence = recall_sequences.at(student);
-			const vector<size_t> & item_sequence = problem_sequences.at(student);
+			const vector<size_t> & item_sequence = item_sequences.at(student);
 
 			// initialize p_hat
 			boost::unordered_map<size_t, double> p_hat;
@@ -609,8 +647,9 @@ void MixtureWCRP::record_sample(const size_t replication, const size_t test_fold
 }
 
 
+// append the current skill assignments to the file handle outfile_skills
 void MixtureWCRP::record_skill_assignments(const size_t replication, const size_t test_fold) {
-	// save the current skill assignments to file
+	
 	boost::unordered_map<size_t, int> skill_labels;
 	outfile_skills << replication << " " << test_fold << " ";
 	for (size_t item = 0; item < num_items; item++) {
@@ -630,7 +669,7 @@ void MixtureWCRP::cache_p_hat(const size_t student, const size_t end_trial, boos
 
 	// define some references for convenience:
 	const vector<bool> & recall_sequence = recall_sequences.at(student);
-	const vector<size_t> & item_sequence = problem_sequences.at(student);
+	const vector<size_t> & item_sequence = item_sequences.at(student);
 
 	// initialize p_hat
 	for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
@@ -661,7 +700,7 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
 
 	// define some references for convenience:
 	const vector<bool> & recall_sequence = recall_sequences.at(student);
-	const vector<size_t> & item_sequence = problem_sequences.at(student);
+	const vector<size_t> & item_sequence = item_sequences.at(student);
 	num_trials = item_sequence.size(); // only used by full_data_log_likelihood. not important to the sampler
 
 	boost::unordered_map<size_t, double> p_hat; // psi is a vector of length max_num_skills
@@ -811,25 +850,25 @@ void MixtureWCRP::run_mcmc(const string outfilename, const size_t replication, c
 				const size_t table_id = table_itr->first;
 
 				// figure out which items are assigned to this skill
-				vector<size_t> questions_assigned_to_skill;
+				vector<size_t> items_assigned_to_skill;
 				for (size_t item = 0; item < num_items; item++) {
-					if (seating_arrangement.at(item) == table_id) questions_assigned_to_skill.push_back(item);
+					if (seating_arrangement.at(item) == table_id) items_assigned_to_skill.push_back(item);
 				}
 
-				// figure out which students would be affected by a change in this skill's parameterization
+				// figure out which students would be affected by a change in this skill's BKT parameterization
 				vector<size_t> students_to_include, first_exposures;
 				for (size_t student = 0; student < num_students; student++) {
-					if (train_students.count(student) && studied_any_of(student, questions_assigned_to_skill)) {
+					if (train_students.count(student) && studied_any_of(student, items_assigned_to_skill)) {
 						students_to_include.push_back(student);
-						size_t min_val = problem_sequences.at(student).size();
-						for (vector<size_t>::const_iterator item_itr = questions_assigned_to_skill.begin(); item_itr != questions_assigned_to_skill.end(); item_itr++) {
+						size_t min_val = item_sequences.at(student).size();
+						for (vector<size_t>::const_iterator item_itr = items_assigned_to_skill.begin(); item_itr != items_assigned_to_skill.end(); item_itr++) {
 							if (first_encounter.at(student).at(*item_itr) < min_val) min_val = first_encounter.at(student).at(*item_itr);
 						}
 						first_exposures.push_back(min_val);
 					}
 				}
 
-				// update the skill parameters in random order
+				// update the skill's BKT parameters in random order
 				vector<double * > param_ptrs;
 				param_ptrs.push_back(&(table_itr->second.psi));
 				param_ptrs.push_back(&(table_itr->second.mu));

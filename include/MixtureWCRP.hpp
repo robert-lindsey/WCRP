@@ -1,3 +1,28 @@
+/*
+The MIT License (MIT)
+
+Copyright (c) 2015 Robert Lindsey
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
 #ifndef MIXTURE_WCRP_H
 #define MIXTURE_WCRP_H
 
@@ -14,7 +39,7 @@ class MixtureWCRP {
 				 const set<size_t> & train_students,
 				 const set<size_t> & test_students,
 				 const vector< vector<bool> > & recall_sequences,
-				 const vector< vector<size_t> > & problem_sequences,
+				 const vector< vector<size_t> > & item_sequences,
 				 const vector<size_t> & provided_skill_assignments,
 				 const double gamma,
 				 const double init_alpha_prime,
@@ -32,7 +57,7 @@ class MixtureWCRP {
 	double data_log_likelihood(const vector<size_t> & students, const vector<size_t> & first_exposures) const;
 	double data_log_likelihood(const size_t student, const size_t first_exposure, size_t & num_trials) const;
 
-  	bool studied_any_of(const size_t student, const vector<size_t> & questions) const;
+  	bool studied_any_of(const size_t student, const vector<size_t> & items) const;
 	void record_sample(const size_t replication, const size_t test_fold, const size_t iter, const size_t burn, const bool infer_gamma, const double elapsed_time, const double train_ll, const double test_ll, const size_t train_n, const size_t test_n, const size_t num_skills, const double cur_seating_lp);
 	void record_skill_assignments(const size_t replication, const size_t test_fold);
 
@@ -59,20 +84,20 @@ class MixtureWCRP {
   	const set<size_t> & train_students;
   	const set<size_t> & test_students;
   	const vector< vector<bool> > & recall_sequences;
-  	const vector< vector<size_t> > & problem_sequences;
+  	const vector< vector<size_t> > & item_sequences;
   	const vector<size_t> & provided_skill_assignments;
   	const size_t num_students;
   	const size_t num_items;
   	const size_t num_subsamples;
   	
-  	// chain state
-  	vector<size_t> seating_arrangement; 		   // seating_arrangement[item] = table id
+  	// Markov chain state
+  	vector<size_t> seating_arrangement; // seating_arrangement[item] = table id
   	boost::unordered_map<size_t, struct bkt_parameters> parameters; // mapping b/w table id and parameter values
 	double log_alpha_prime;
 	double log_gamma;
 
 	size_t num_used_skills;
-	boost::unordered_map<size_t, size_t> table_sizes; // table_sizes[table_id] = # of questions assigned to it
+	boost::unordered_map<size_t, size_t> table_sizes; // table_sizes[table_id] = # of items assigned to it
 	set<size_t> extant_tables;
 	boost::unordered_map<size_t, boost::unordered_map<size_t, vector<size_t> > > trial_lookup; // trial_lookup[table_id][student_id] = sequence of trial #s assigned to the student-skill pair
 	size_t tables_ever_instantiated;
@@ -88,7 +113,7 @@ class MixtureWCRP {
 
 	bool use_expert_labels;
 
-	vector< vector<pair<size_t, bool> > > problem_and_recall_sequences; // student, trial, (item, recall)
+	vector< vector<pair<size_t, bool> > > item_and_recall_sequences; // student, trial, (item, recall)
 
 	vector<struct bkt_parameters> prior_samples;
 	vector< vector<double> > singleton_skill_data_lp;
