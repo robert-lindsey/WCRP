@@ -39,13 +39,14 @@ For example, your data should look like the following:
     ...
 
 In the above example, student #0 was initially presented with item #0 and produced an incorrect response, and then was presented with item #1 and produced a correct response.
-Student #1 was presented with item #2 and produced a correct response
-According to the human annotator, items #0 and #1 practice skill #0 and item #2 practices skill #1. 
+Student #1 was presented with item #2 and produced a correct response. 
+According to the human annotator, items #0 and #1 practice skill #0, and item #2 practices skill #1. 
 
 
 ## Usage 
 
-TODO: the following is outdated but will be fixed soon: 
+Compiling WCRP produces two executable files: find_skills and cross_validation. 
+Each has a variety of command line options you can view via the command line argument --help. 
 
 
 #### Finding the most likely skill assignments
@@ -69,10 +70,10 @@ It'll produce the text file sampled_skills.txt which will 2000 lines (one per po
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in skills.txt is a sample from that distribution.
 
-It's important to note that the skill ids are arbitrary: you can't count on them being the same across samples (i.e., skill 10 on sample 1 may be called skill 42 on sample 2, since the skill IDs only denote the partitioning of items into skills given the state of the sampler. The number of skills will vary between samples too.)
+It's important to note that the skill IDs are arbitrary: you can't count on them being the same across samples. For example, skill 10 on sample 1 may be called skill 42 on sample 2, since the skill IDs only denote the partitioning of items into skills given the state of the Markov chain. The number of skills will typically vary between samples too.
 
 
-#### Cross Validation Simulations 
+#### Running cross validation simulations on heldout students 
 
 TODO: description of split files 
 
@@ -84,10 +85,6 @@ To view the available command line options, type
 The resulting predictions.txt file contains the expected posterior probability of recall for each of the trials of students in a heldout set. It's marginalizing over uncertainty in the skill assignments, number of skills, and Bayesian knowledge tracing parameterizations. See the last few lines of MixtureWCRP::run\_mcmc. There should be one line per student-trial. 
 
 If you don't have any expert provided skill assignments, you can just use dummy values for the skill id. There's a program option for init\_beta and infer\_beta. If init\_beta is set to 0.0 and you do not set infer\_beta, the code ignores the provided skill values by reverting to a CRP. 
-
-
-
-## Implementation Notes
 
 
 
