@@ -43,19 +43,18 @@ Student #1 was presented with item #2 and produced a correct response.
 According to the human annotator, items #0 and #1 practice skill #0, and item #2 practices skill #1. 
 
 
-## Usage 
+## Example Usage 
 
 Compiling WCRP produces two executable files: find_skills and cross_validation. 
 Each has a variety of command line options you can view via the command line argument --help. 
-
 
 #### Finding the most likely skill assignments
 
 The command
 
-    ./bin/find_skills --map_estimate --datafile dataset.txt --savefile map_skills.txt --num_iterations 3000 --burn 1000
+    ./bin/find_skills --datafile dataset.txt --savefile map_estimate_skills.txt --map_estimate 
 
-will run the Gibbs sampler on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_skills.txt. The ith number in map_skills.txt is the skill ID of item i. 
+will run the Gibbs sampler on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith number in map_skills.txt is the skill ID of item i. 
 
 
 #### Determining the distribution over skill assignments
@@ -66,7 +65,7 @@ The command
     ./bin/find_skills --datafile dataset.txt --savefile sampled_skills.txt --num_iterations 3000 --burn 1000
 
 will run the Gibbs sampler on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
-It'll produce the text file sampled_skills.txt which will 2000 lines (one per post burn-in iteration). 
+It'll produce the text file sampled_skills.txt which will have 2000 lines (one per post burn-in iteration). 
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in skills.txt is a sample from that distribution.
 

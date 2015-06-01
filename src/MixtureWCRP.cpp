@@ -169,7 +169,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 	}
 
 	// to avoid unnecessary work during MCMC, figure out which students studied which items in the training data
-	ever_studied.resize(num_students); // training data only
+	ever_studied.resize(num_students); // training students only. sloppy notation 
 	pRT_samples.resize(num_students);
 	for (size_t student = 0; student < num_students; student++) {
 		pRT_samples[student].resize(recall_sequences.at(student).size());
@@ -186,7 +186,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 	all_first_encounters.resize(num_items);
 	for (size_t item = 0; item < num_items; item++) {
 		for (size_t student = 0; student < num_students; student++) {
-			if (ever_studied.at(student).at(item)) {
+			if (ever_studied.at(student).at(item)) { // sloppy notation. this'll only ever be true for training students 
 				students_who_studied[item].push_back(student);
 				all_first_encounters[item].push_back(first_encounter.at(student).at(item));
 			}
@@ -305,7 +305,7 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 		// update alpha' and gamma
 		cout << "  resampling WCRP hyperparameters" << endl;
 		double cur_seating_lp = log_seating_prob();
-		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
+		for (size_t extra_step = 0; extra_step < 1; extra_step++) {
 			if (!use_expert_labels && infer_alpha_prime) cur_seating_lp = slice_resample_wcrp_param(&log_alpha_prime, cur_seating_lp, -10, 11, .25, log_logalphaprime_prior_density);
 
 			// update gamma
@@ -314,7 +314,7 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 		
 		// update the BKT parameters for each skill
 		cout << "  resampling skill parameters" << endl;
-		for (size_t extra_step = 0; extra_step < 5; extra_step++) {
+		for (size_t extra_step = 0; extra_step < 1; extra_step++) {
 			for (boost::unordered_map<size_t, struct bkt_parameters>::iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) {
 				const size_t table_id = table_itr->first;
 
@@ -367,9 +367,10 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 		const double train_ll = full_data_log_likelihood(true, train_n);
 		const double test_ll = full_data_log_likelihood(false, test_n);
 		if (!use_expert_labels) cout << "  log_alpha_prime = " << log_alpha_prime << " (alpha' = " << exp(log_alpha_prime) << ")" << endl;
-		cout << "  log_gamma = " << log_gamma << " (gamma = " << exp(log_gamma) << ")" << endl;
-		cout << "  TRAINING STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-train_ll / train_n) << endl;
-		cout << "  HELDOUT STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-test_ll / test_n) << endl;
+		const double beta = 1.0 - exp(log_gamma); // gamma is legacy notation 
+		cout << "  beta = " << beta << " (log_beta = " << log(beta) << ")" << endl;
+		if (train_n > 0) cout << "  TRAINING STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-train_ll / train_n) << endl;
+		if (test_n > 0) cout << "  HELDOUT STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-test_ll / test_n) << endl;
 		cout << "  iteration completed in " << elapsed_ms / 60000.0 << " minutes." << endl;
 		cout << "  current number of skills: " << num_used_skills << endl << endl;
 		/////////////////////////////////////
@@ -387,7 +388,7 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 void MixtureWCRP::gibbs_resample_skill(const size_t item) {
 
 	const size_t cur_table_id = seating_arrangement.at(item);
-	const vector<size_t> & affected_students = students_who_studied.at(item);
+	const vector<size_t> & affected_students = students_who_studied.at(item); // (this won't contain any heldout students)
 	const vector<size_t> & first_exposures = all_first_encounters.at(item);
 
 	// unassign the item's skill label
