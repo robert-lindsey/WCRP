@@ -217,7 +217,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
 
 	// precompute the marginal likelihood of each item if it were a singleton skill
 	if (!use_expert_labels) {
-		cout << "precomputing all possible singleton skill marginal likelihoods" << endl;
+		//cout << "precomputing all possible singleton skill marginal likelihoods" << endl;
 		singleton_skill_data_lp.resize(num_items);
 
 		prior_samples.resize(num_subsamples);
@@ -298,12 +298,12 @@ vector<size_t> MixtureWCRP::get_most_likely_skill_assignments() const {
 void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const bool infer_gamma, const bool infer_alpha_prime) {
 
 	for (size_t iter = 0; iter < num_iterations; iter++) {
-		cout << "SAMPLING ITERATION " << (iter+1) << " OF " << num_iterations << endl;
+		//cout << "SAMPLING ITERATION " << (iter+1) << " OF " << num_iterations << endl;
 
 		clock_t begin = clock();
 		
 		// update alpha' and gamma
-		cout << "  resampling WCRP hyperparameters" << endl;
+		//cout << "  resampling WCRP hyperparameters" << endl;
 		double cur_seating_lp = log_seating_prob();
 		for (size_t extra_step = 0; extra_step < 1; extra_step++) {
 			if (!use_expert_labels && infer_alpha_prime) cur_seating_lp = slice_resample_wcrp_param(&log_alpha_prime, cur_seating_lp, -10, 11, .25, log_logalphaprime_prior_density);
@@ -313,7 +313,7 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 		}
 		
 		// update the BKT parameters for each skill
-		cout << "  resampling skill parameters" << endl;
+		//cout << "  resampling skill parameters" << endl;
 		for (size_t extra_step = 0; extra_step < 1; extra_step++) {
 			for (boost::unordered_map<size_t, struct bkt_parameters>::iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) {
 				const size_t table_id = table_itr->first;
@@ -353,11 +353,11 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 
 		// update the WCRP seating arrangement
 		if (!use_expert_labels) {
-			cout << "  resampling skill assignments" << endl;
+			//cout << "  resampling skill assignments" << endl;
 			generator->shuffle(all_items);
 			for (vector<size_t>::const_iterator item_itr = all_items.begin(); item_itr != all_items.end(); item_itr++) gibbs_resample_skill(*item_itr);
 		}
-		else cout << "  skipping resampling the skill assignments because we're using the expert labels" << endl;
+		//else cout << "  skipping resampling the skill assignments because we're using the expert labels" << endl;
 
 		clock_t end = clock();
   		double elapsed_ms = (end - begin)/(CLOCKS_PER_SEC/1000.0);
@@ -365,19 +365,22 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
 		// print out a status update
 		size_t train_n, test_n;
 		const double train_ll = full_data_log_likelihood(true, train_n);
+		const double beta = 1.0 - exp(log_gamma); // gamma is legacy notation 
+		/*
 		const double test_ll = full_data_log_likelihood(false, test_n);
 		if (!use_expert_labels) cout << "  log_alpha_prime = " << log_alpha_prime << " (alpha' = " << exp(log_alpha_prime) << ")" << endl;
-		const double beta = 1.0 - exp(log_gamma); // gamma is legacy notation 
 		cout << "  beta = " << beta << " (log_beta = " << log(beta) << ")" << endl;
 		if (train_n > 0) cout << "  TRAINING STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-train_ll / train_n) << endl;
 		if (test_n > 0) cout << "  HELDOUT STUDENTS cross entropy (using single sample) = " << setprecision(5) << (-test_ll / test_n) << endl;
 		cout << "  iteration completed in " << elapsed_ms / 60000.0 << " minutes." << endl;
 		cout << "  current number of skills: " << num_used_skills << endl << endl;
-		/////////////////////////////////////
+		*/
+
+		if (iter == 0) cout << "iter\tsec.\tbeta\tnskills\tdata_ll\tcross_entropy" << endl;
+		cout.setf(ios::fixed);
+		cout << (iter+1) << "\t" << setprecision(2) << (elapsed_ms / 10000.0) << "\t" << setprecision(4) << beta << "\t" << setprecision(0) << extant_tables.size() << "\t" << train_ll << "\t" << setprecision(4) << (-train_ll / train_n) << endl;
 
 		if (iter >= burn) record_sample(train_ll);
-		 
-		// record_sample(iter, burn, infer_gamma, elapsed_ms / 60000.0, train_ll, test_ll, train_n, test_n, num_used_skills, log_seating_prob());
 	}
 
 }

@@ -62,7 +62,7 @@ will run the Gibbs sampler on the data in dataset.txt using default settings. It
 
 The command
 
-    ./bin/find_skills --datafile dataset.txt --savefile sampled_skills.txt --num_iterations 3000 --burn 1000
+    ./bin/find_skills --datafile dataset.txt --savefile sampled_skills.txt --iterations 3000 --burn 1000
 
 will run the Gibbs sampler on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
 It'll produce the text file sampled_skills.txt which will have 2000 lines (one per post burn-in iteration). 
