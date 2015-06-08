@@ -1,14 +1,8 @@
 # WCRP
 
-UNDER CONSTRUCTION. 
-
-
-Weighted Chinese Restaurant Process model for inferring skill labels in Bayesian Knowledge Tracing
+Weighted Chinese Restaurant Process (WCRP) model for inferring skill labels in Bayesian Knowledge Tracing
 
 Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
-
-TODO: high level overview , motivation 
-TODO: terminology of trial, item, WCRP, ...
 
 
 ## Compiling
@@ -24,11 +18,12 @@ After installing Boost and GNU GSL, run
 
 to compile the code. 
 
+
 ## Data Format 
 
-WCRP assumes that your data are in a space-delimited text file with one row per trial. 
+WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
 The columns should correspond to a trial's student ID, item ID, expert-provided skill ID, and whether the student produced a correct response in the trial. 
-The rows for a given student should be ordered by the timestamp (from least to most recent).  
+The rows for a given student should be ordered from least to most recent.  
 
 It's important that the student IDs are integers in \[0, ..., S - 1\], the item IDs are integers in \[0, ..., I - 1 \], and the expert-provided skills are in \[0, ..., E - 1\] where S is the number of students in your dataset, I is the number of items, and E is the number of expert-provided skills. 
 For example, your data should look like the following: 
@@ -48,6 +43,10 @@ According to the human annotator, items #0 and #1 practice skill #0, and item #2
 Compiling WCRP produces two executable files: find_skills and cross_validation. 
 Each has a variety of command line options you can view via the command line argument --help. 
 
+You can tell the model to ignore the expert-provided skill IDs via --fix_beta 0. 
+That argument reverts our WCRP to a CRP. 
+
+
 #### Finding the most likely skill assignments
 
 The command
@@ -58,7 +57,6 @@ will run the Gibbs sampler on the data in dataset.txt using default settings. It
 
 
 #### Determining the distribution over skill assignments
-
 
 The command
 
@@ -74,17 +72,23 @@ It's important to note that the skill IDs are arbitrary: you can't count on them
 
 #### Running cross validation simulations on heldout students 
 
-TODO: description of split files 
+The program cross_validation runs K-fold cross validation on your dataset.
+It requires a space-delimited text file ("foldfile") with one row per cross validation simulation.
+If there are S students in your dataset, then there should be S columns.
+Each entry indicates the fold number of the student in that replication. e.g.,
 
-To view the available command line options, type
+    0 0 1 1 2 2
+    0 1 2 0 1 2
 
-    ./bin/cross_validation
+denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2.     
+The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
 
+The command
 
-The resulting predictions.txt file contains the expected posterior probability of recall for each of the trials of students in a heldout set. It's marginalizing over uncertainty in the skill assignments, number of skills, and Bayesian knowledge tracing parameterizations. See the last few lines of MixtureWCRP::run\_mcmc. There should be one line per student-trial. 
+    ./bin/cross_validation --datafile dataset.txt --foldfile folds.txt --predfile predictions.txt 
 
-If you don't have any expert provided skill assignments, you can just use dummy values for the skill id. There's a program option for init\_beta and infer\_beta. If init\_beta is set to 0.0 and you do not set infer\_beta, the code ignores the provided skill values by reverting to a CRP. 
-
+will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set. 
+There will be one line per replication-student-trial. 
 
 
 ## License and Citation
