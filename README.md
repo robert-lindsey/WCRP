@@ -1,6 +1,7 @@
 # WCRP
 
-WCRP is a Weighted Chinese Restaurant Process (WCRP) model for inferring skill labels in Bayesian Knowledge Tracing. 
+WCRP is a Weighted Chinese Restaurant Process model for inferring skill labels in Bayesian Knowledge Tracing. 
+
 Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
 
 
