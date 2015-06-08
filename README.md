@@ -1,7 +1,6 @@
 # WCRP
 
-Weighted Chinese Restaurant Process (WCRP) model for inferring skill labels in Bayesian Knowledge Tracing
-
+WCRP is a Weighted Chinese Restaurant Process (WCRP) model for inferring skill labels in Bayesian Knowledge Tracing. 
 Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
 
 
@@ -67,21 +66,22 @@ It'll produce the text file sampled_skills.txt which will have 2000 lines (one p
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in skills.txt is a sample from that distribution.
 
-It's important to note that the skill IDs are arbitrary: you can't count on them being the same across samples. For example, skill 10 on sample 1 may be called skill 42 on sample 2, since the skill IDs only denote the partitioning of items into skills given the state of the Markov chain. The number of skills will typically vary between samples too.
+It's important to note that the skill IDs are sample-specific: you can't count on them being the same across samples. 
+The skill IDs denote the partitioning of items into skills given the state of the Markov chain. 
+The number of skills will typically vary between samples too.
 
 
 #### Running cross validation simulations on heldout students 
 
-The program cross_validation runs K-fold cross validation on your dataset.
-It requires a space-delimited text file ("foldfile") with one row per cross validation simulation.
-If there are S students in your dataset, then there should be S columns.
-Each entry indicates the fold number of the student in that replication. e.g.,
+The executable cross_validation runs K-fold cross validation on your dataset.
+It requires a space-delimited text file ("foldfile") with one row per cross validation simulation you want to run.
+There should be one column per student in your dataset. 
+Each entry indicates the fold number of the student in that replication. For example, 
 
     0 0 1 1 2 2
     0 1 2 0 1 2
 
-denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2.     
-The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
+denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2. The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
 
 The command
 
