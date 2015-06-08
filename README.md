@@ -19,13 +19,13 @@ After installing Boost and GNU GSL, run
 to compile the code. 
 
 
-## Data Format 
+## Data format 
 
-#### (Required) Student Responses
+#### (Required) Student responses
 
 WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
 The columns should correspond to a trial's student ID, item ID, and whether the student produced a correct response in the trial. 
-The IDs should be integers beginning at 0, and the rows for each student should be ordered from least to most recent. 
+The IDs should be integers beginning at 0, and the trials for each student should be ordered from least to most recent. 
 
 For example, your data should look like the following: 
 
@@ -102,7 +102,7 @@ will produce the text file predictions.txt containing the expected posterior pro
 There will be one line per replication-fold-student-trial. 
 
 
-## License and Citation
+## License and citation
 
 This code is released under the [MIT License](https://github.com/robert-lindsey/WCRP/blob/master/LICENSE.md).
 
