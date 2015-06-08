@@ -77,6 +77,7 @@ void load_expert_labels(const char * filename, vector<size_t> & provided_skill_l
 		exit(EXIT_FAILURE);
 	}
 	
+	size_t skill;
 	size_t num_lines = 0;
 	while (in >> skill) provided_skill_labels[num_lines++] = skill;
 	in.close();
