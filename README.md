@@ -23,8 +23,8 @@ to compile the code.
 WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
 The columns should correspond to a trial's student ID, item ID, expert-provided skill ID, and whether the student produced a correct response in the trial. 
 The rows for a given student should be ordered from least to most recent.  
+All the IDs should be integers beginning at 0. 
 
-It's important that the student IDs are integers in \[0, ..., S - 1\], the item IDs are integers in \[0, ..., I - 1 \], and the expert-provided skills are in \[0, ..., E - 1\] where S is the number of students in your dataset, I is the number of items, and E is the number of expert-provided skills. 
 For example, your data should look like the following: 
 
     0 0 0 0
@@ -66,8 +66,7 @@ It'll produce the text file sampled_skills.txt which will have 2000 lines (one p
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in skills.txt is a sample from that distribution.
 
-It's important to note that the skill IDs are sample-specific: you can't count on them being the same across samples. 
-The skill IDs denote the partitioning of items into skills given the state of the Markov chain. 
+The skill IDs are sample-specific: you can't count on them being the same across samples because they only denote the partitioning of items into skills given the state of the Markov chain. 
 The number of skills will typically vary between samples too.
 
 
@@ -87,8 +86,8 @@ The command
 
     ./bin/cross_validation --datafile dataset.txt --foldfile folds.txt --predfile predictions.txt 
 
-will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set. 
-There will be one line per replication-student-trial. 
+will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in the heldout set. 
+There will be one line per replication-fold-student-trial. 
 
 
 ## License and Citation
