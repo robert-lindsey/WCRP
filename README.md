@@ -21,7 +21,7 @@ to compile the code.
 
 ## Data Format 
 
-#### Student Responses
+#### (Required) Student Responses
 
 WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
 The columns should correspond to a trial's student ID, item ID, and whether the student produced a correct response in the trial. 
@@ -33,24 +33,24 @@ For example, your data should look like the following:
     0 1 1
     1 2 1
     
-In the above example, student 0 was initially presented with item 0 and produced an incorrect response, and then was presented with item 1 and produced a correct response.
-Student 1 was presented with item 2 and produced a correct response. 
+In the above example, student 0 was initially presented with item 0 and produced an incorrect response, and then was presented with item 1 and produced a correct response; 
+student 1 was presented with item 2 and produced a correct response. 
 
 
 #### (Optional) Expert-provided skills  
 
 Our model's nonparametric prior distribution over skill labels can leverage skill labels provided by a human domain expert. 
 If you want to provide them to our model, create a text file with one line per item. 
-Each line should contain an expert-provided skill ID. 
+The ith line should be the expert-provided skill ID for the ith item. 
 
-The parameter "beta" in the model controls how much the prior is drawn toward the expert-provided skills.
+The parameter beta in the model controls how much the prior is drawn toward the expert-provided skills.
 A value of 0 will have the model ignore the expert-provided skills, and the model will deterministically use
 the expert-provided skills as beta approaches 1. 
-The command line options of our program allow you to hold beta constant at some specified value or to have the model give
-beta the Bayesian treatment (and treat it as another random nuisance variable). 
+The command line options of WCRP allow you to hold beta constant at a specified value or to have the model give
+beta the Bayesian treatment by treating it as another random nuisance variable. 
 
 
-## Example Usage 
+## Usage 
 
 Compiling WCRP produces two executable files: find_skills and cross_validation. 
 Each has a variety of command line options you can view via the command line argument --help. 
@@ -62,7 +62,7 @@ The command
 
     ./bin/find_skills --datafile dataset.txt --savefile map_estimate_skills.txt --map_estimate 
 
-will run the Gibbs sampler on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith number in map_skills.txt is the skill ID of item i. 
+will run the Gibbs sampler on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith entry in map_skills.txt is the skill ID of item i. 
 
 
 #### Sampling the posterior distribution over skill assignments 
@@ -71,7 +71,7 @@ The command
 
     ./bin/find_skills --datafile dataset.txt --savefile sampled_skills.txt --iterations 3000 --burn 1000
 
-will run the Gibbs sampler on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
+will run the MCMC algorithm on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
 It'll produce the text file sampled_skills.txt which will have 2000 lines (one per post burn-in iteration). 
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in skills.txt is a sample from that distribution.
