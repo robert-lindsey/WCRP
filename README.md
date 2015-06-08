@@ -20,30 +20,39 @@ to compile the code.
 
 ## Data Format 
 
+#### Student Responses
+
 WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
-The columns should correspond to a trial's student ID, item ID, expert-provided skill ID, and whether the student produced a correct response in the trial. 
-The rows for a given student should be ordered from least to most recent.  
-All the IDs should be integers beginning at 0. 
+The columns should correspond to a trial's student ID, item ID, and whether the student produced a correct response in the trial. 
+The IDs should be integers beginning at 0, and the rows for each student should be ordered from least to most recent. 
 
 For example, your data should look like the following: 
 
-    0 0 0 0
-    0 1 0 1
-    1 2 1 1
-    ...
+    0 0 0
+    0 1 1
+    1 2 1
+    
+In the above example, student 0 was initially presented with item 0 and produced an incorrect response, and then was presented with item 1 and produced a correct response.
+Student 1 was presented with item 2 and produced a correct response. 
 
-In the above example, student #0 was initially presented with item #0 and produced an incorrect response, and then was presented with item #1 and produced a correct response.
-Student #1 was presented with item #2 and produced a correct response. 
-According to the human annotator, items #0 and #1 practice skill #0, and item #2 practices skill #1. 
+
+#### (Optional) Expert-provided skills  
+
+Our model's nonparametric prior distribution over skill labels can leverage skill labels provided by a human domain expert. 
+If you want to provide them to our model, create a text file with one line per item. 
+Each line should contain an expert-provided skill ID. 
+
+The parameter "beta" in the model controls how much the prior is drawn toward the expert-provided skills.
+A value of 0 will have the model ignore the expert-provided skills, and the model will deterministically use
+the expert-provided skills as beta approaches 1. 
+The command line options of our program allow you to hold beta constant at some specified value or to have the model give
+beta the Bayesian treatment (and treat it as another random nuisance variable). 
 
 
 ## Example Usage 
 
 Compiling WCRP produces two executable files: find_skills and cross_validation. 
 Each has a variety of command line options you can view via the command line argument --help. 
-
-You can tell the model to ignore the expert-provided skill IDs via --fix_beta 0. 
-That argument reverts our WCRP to a CRP. 
 
 
 #### Finding the most likely skill assignments
@@ -55,7 +64,7 @@ The command
 will run the Gibbs sampler on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith number in map_skills.txt is the skill ID of item i. 
 
 
-#### Determining the distribution over skill assignments
+#### Sampling the posterior distribution over skill assignments 
 
 The command
 
@@ -71,6 +80,8 @@ The number of skills will typically vary between samples too.
 
 
 #### Running cross validation simulations on heldout students 
+
+[THESE INSTRUCTIONS WILL BE UPDATED SOON]
 
 The executable cross_validation runs K-fold cross validation on your dataset.
 It requires a space-delimited text file ("foldfile") with one row per cross validation simulation you want to run.

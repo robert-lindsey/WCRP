@@ -268,7 +268,7 @@ double MixtureWCRP::get_estimated_recall_prob(const size_t student, const size_t
 
 // returns the skill assignments for each item across all samples
 // each returned vector has one entry per item denoting the skill id
-vector< vector<size_t> > MixtureWCRP::get_skill_assignments() const {
+vector< vector<size_t> > MixtureWCRP::get_sampled_skill_labels() const {
 	assert(!skill_label_samples.empty()); // need to have called run_mcmc first 
 	return skill_label_samples;
 }
@@ -276,7 +276,7 @@ vector< vector<size_t> > MixtureWCRP::get_skill_assignments() const {
 
 // returns the skill assignments which maximized the training data log likelihood 
 // the returned vector has one entry per item denoting the skill id
-vector<size_t> MixtureWCRP::get_most_likely_skill_assignments() const {
+vector<size_t> MixtureWCRP::get_most_likely_skill_labels() const {
 	assert(!skill_label_samples.empty()); // need to have called run_mcmc first 
 	assert(train_ll_samples.size() == skill_label_samples.size());
 	

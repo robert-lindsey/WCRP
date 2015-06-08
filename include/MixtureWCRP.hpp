@@ -55,11 +55,11 @@ class MixtureWCRP {
 	
 	// returns the skill assignments for each item across all samples
 	// each returned vector has one entry per item denoting the skill id
-	vector< vector<size_t> > get_skill_assignments() const; 
+	vector< vector<size_t> > get_sampled_skill_labels() const; 
 	
 	// returns the skill assignments which maximized the training data log likelihood 
 	// the returned vector has one entry per item denoting the skill id
-	vector<size_t> get_most_likely_skill_assignments() const; 
+	vector<size_t> get_most_likely_skill_labels() const; 
 	
 	
   protected:
