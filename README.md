@@ -50,21 +50,11 @@ The number of skills will typically vary between samples too.
 
 #### Running cross validation simulations on heldout students 
 
-The executable cross_validation runs K-fold cross validation on your dataset.
-It requires a space-delimited text file ("foldfile") with one row per cross validation simulation you want to run.
-There should be one column per student in your dataset. 
-Each entry indicates the fold number of the student in that replication. For example, 
-
-    0 0 1 1 2 2
-    0 1 2 0 1 2
-
-denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2. The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
-
 The command
 
     ./bin/cross_validation --datafile dataset.txt --savefile predictions.txt  --foldfile folds.txt 
 
-will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in the heldout set. 
+will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students.  
 There will be one line per replication-fold-student-trial. 
 
 
@@ -97,6 +87,19 @@ A value of 0 will have the model ignore the expert-provided skills, and the mode
 the expert-provided skills as beta approaches 1. 
 The command line options of WCRP allow you to hold beta constant at a specified value or to have the model give
 beta the Bayesian treatment by treating it as another random nuisance variable. 
+
+
+#### K-fold cross validation assignments
+
+The executable cross_validation runs K-fold cross validation on your dataset.
+It requires a space-delimited text file ("foldfile") with one row per cross validation simulation you want to run.
+There should be one column per student in your dataset. 
+Each entry indicates the fold number of the student in that replication. For example, 
+
+    0 0 1 1 2 2
+    0 1 2 0 1 2
+
+denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2. The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
 
 
 ## License and citation
