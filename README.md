@@ -42,7 +42,7 @@ The command
 will run the MCMC algorithm on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
 It'll produce sampled_skills.txt which will have 2000 lines, one per post burn-in iteration. 
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
-Each line in skills.txt is a sample from that distribution.
+Each line in sampled_skills.txt is a sample from that distribution.
 
 The skill IDs are sample-specific: you can't count on them being the same across samples because they only denote the partitioning of items into skills given the state of the Markov chain. 
 The number of skills will typically vary between samples too.
@@ -54,7 +54,7 @@ The command
 
     ./bin/cross_validation --datafile dataset.txt --savefile predictions.txt  --foldfile folds.txt 
 
-will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students. There will be one line per replication-fold-student-trial. 
+will produce the file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students. There will be one line per replication-fold-student-trial. 
 
 
 ## Data format 
