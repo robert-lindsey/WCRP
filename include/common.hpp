@@ -38,6 +38,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <cassert>
 #include <map>
 #include <ctime>
+#include <string>
 
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -60,5 +61,16 @@ struct bkt_parameters {
 	double prop0; // probability of a correct response in the unlearned state is prop0*pi1
 				  //  it enforces Pr(correct | learned state) >= Pr(correct | unlearned state) 
 };
+
+// reads a tab delimited file with the columns: student id, item id, skill id, recall success
+// all ids are assumed to start at 0 and be contiguous
+void load_student_data(const char * filename, std::vector< std::vector<bool> > & recall_sequences, std::vector< std::vector<size_t> > & item_sequences, size_t & num_students, size_t & num_items, size_t & num_skills);
+
+// reads a text file with expert-provided skill ids
+void load_expert_labels(const char * filename, std::vector<size_t> & provided_skill_labels, const size_t num_items);
+
+// reads the K-fold cross validation assignments
+void load_splits(const char * filename, std::vector<std::vector<size_t> > & fold_nums, size_t & num_folds, const size_t num_students);
+
 
 #endif

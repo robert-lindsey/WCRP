@@ -32,59 +32,6 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 using namespace std;
 
 
-// reads a tab delimited file with the columns: student id, item id, skill id, recall success
-// all ids are assumed to start at 0 and be contiguous
-void load_student_data(const char * filename, vector< vector<bool> > & recall_sequences, vector< vector<size_t> > & item_sequences, size_t & num_students, size_t & num_items, size_t & num_skills) {
-
-	num_students=0, num_items=0, num_skills=0;
-	size_t student, item, skill, recall;
-
-	ifstream in(filename);
-	if (!in.is_open()) { 
-		cerr << "couldn't open " << string(filename) << endl;
-		exit(EXIT_FAILURE);
-	}
-	
-	// figure out how many students, items, and skills there are
-	while (in >> student >> item >> skill >> recall) {
-		num_students = max(student+1, num_students);
-		num_items = max(item+1, num_items);
-		num_skills = max(skill+1, num_skills);
-	}
-	in.close();
-	cout << "dataset has " << num_students << " students, " << num_items << " items, and " << num_skills << " expert-provided skills" << endl;
-
-	// initialize
-	recall_sequences.resize(num_students);
-	item_sequences.resize(num_students);
-
-	// read the dataset
-	in.open(filename);
-	while (in >> student >> item >> skill >> recall) {
-		recall_sequences[student].push_back(recall);
-		item_sequences[student].push_back(item);
-	}
-	in.close();
-}
-
-
-// reads a text file with expert-provided skill ids
-void load_expert_labels(const char * filename, vector<size_t> & provided_skill_labels, const size_t num_items) {
-
-	ifstream in(filename);
-	if (!in.is_open()) { 
-		cerr << "couldn't open " << string(filename) << endl;
-		exit(EXIT_FAILURE);
-	}
-	
-	size_t skill;
-	size_t num_lines = 0;
-	while (in >> skill) provided_skill_labels[num_lines++] = skill;
-	in.close();
-	assert(num_lines == num_items);
-}
-
-
 int main(int argc, char ** argv) {
 
 	namespace po = boost::program_options;
@@ -102,8 +49,8 @@ int main(int argc, char ** argv) {
 		("savefile", po::value<string>(&savefile), "(required) file to put the skill labels")
 		("expertfile", po::value<string>(&expertfile), "(optional) file containing the expert-provided skill labels")
 		("map_estimate", "(optional) save the MAP skill labels instead of all sampled skill labels")
-		("iterations", po::value<int>(&tmp_num_iterations)->default_value(200), "(optional but highly recommended) number of iterations to run. if you're not sure how to set it, use a large value")
-		("burn", po::value<int>(&tmp_burn)->default_value(100), "(optional but highly recommended) number of iterations to discard. if you're not sure how to set it, use a large value (less than iterations)")
+		("iterations", po::value<int>(&tmp_num_iterations)->default_value(1000), "(optional but highly recommended) number of iterations to run. if you're not sure how to set it, use a large value")
+		("burn", po::value<int>(&tmp_burn)->default_value(500), "(optional but highly recommended) number of iterations to discard. if you're not sure how to set it, use a large value (less than iterations)")
 		("fix_alpha_prime", po::value<double>(&init_alpha_prime), "(optional) fix alpha' at the provided value instead of letting the model try to estimate it")
 		("fix_beta", po::value<double>(&init_beta), "(optional) fix beta at the provided value instead of giving it the Bayesian treatment")
 		("num_subsamples", po::value<int>(&tmp_num_subsamples)->default_value(2000), "number of auxiliary samples to use when approximating the marginal likelihood of new skills")
