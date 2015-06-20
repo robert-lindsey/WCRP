@@ -5,23 +5,23 @@ WCRP is a Weighted Chinese Restaurant Process model for inferring skill labels i
 Check out the [paper](http://papers.nips.cc/paper/5554-automatic-discovery-of-cognitive-skills-to-improve-the-prediction-of-student-learning) for more information. 
 
 
-## Compiling
+## Downloading and compiling
 
 WCRP is written in C++. It depends on the [Boost](http://www.boost.org/) and [GNU GSL](http://www.gnu.org/software/gsl/) libraries. 
 
 After installing Boost and GNU GSL, run
 
+    git clone https://github.com/robert-lindsey/WCRP.git
+    cd WCRP
     mkdir build
     cd build
     cmake ..
     make
 
-to compile the code. 
+You should see two executable files in build/bin: find_skills and cross_validation. 
+You can view the command line options for each via the command line argument --help. 
 
 ## Usage 
-
-Compiling WCRP produces two executable files: find_skills and cross_validation. 
-You can view the command line options for each via the command line argument --help. 
 
 
 #### Finding the most likely skill assignments
@@ -30,7 +30,7 @@ The command
 
     ./bin/find_skills --datafile dataset.txt --savefile map_estimate_skills.txt --map_estimate 
 
-will run the Gibbs sampler on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith entry in map_skills.txt is the skill ID of item i. 
+will run the MCMC algorithm on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith entry in map_skills.txt is the skill ID of item i. 
 
 
 #### Sampling the posterior distribution over skill assignments 
@@ -54,8 +54,7 @@ The command
 
     ./bin/cross_validation --datafile dataset.txt --savefile predictions.txt  --foldfile folds.txt 
 
-will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students.  
-There will be one line per replication-fold-student-trial. 
+will produce the text file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students. There will be one line per replication-fold-student-trial. 
 
 
 ## Data format 
