@@ -64,16 +64,7 @@ will produce the file predictions.txt containing the expected posterior probabil
 WCRP assumes that your student data are in a space-delimited text file with one row per trial. 
 The columns should correspond to a trial's student ID, item ID, and whether the student produced a correct response in the trial. 
 The IDs should be integers beginning at 0, and the trials for each student should be ordered from least to most recent. 
-
-For example, your data should look like the following: 
-
-    0 0 0
-    0 1 1
-    1 2 1
-    
-In the above example, student 0 was initially presented with item 0 and produced an incorrect response, and then was presented with item 1 and produced a correct response; 
-student 1 was presented with item 2 and produced a correct response. 
-
+An example data file is available [here](https://github.com/robert-lindsey/WCRP/blob/master/datasets/spanish_dataset.txt)
 
 #### (Optional) Expert-provided skills  
 
@@ -81,6 +72,7 @@ Our model's nonparametric prior distribution over skill labels can leverage skil
 If you want to provide them to our model, create a text file with one line per item. 
 The ith line should be the expert-provided skill ID for the ith item. 
 You can provide the file to WCRP via the command line argument --expertfile.
+An example file is available [here](https://github.com/robert-lindsey/WCRP/blob/master/datasets/spanish_expert_labels.txt)
 
 The parameter beta in the model controls how much the prior is drawn toward the expert-provided skills.
 A value of 0 will have the model ignore the expert-provided skills, and the model will deterministically use
@@ -100,6 +92,7 @@ Each entry indicates the fold number of the student in that replication. For exa
     0 1 2 0 1 2
 
 denotes that in the first replication, students 0 and 1 are in fold 0, students 2 and 3 are in fold 1, and students 4 and 5 are in fold 2. The second replication has students 0 and 3 in fold 0, students 1 and 4 in fold 1, and students 2 and 5 in fold 3. 
+The files we used are available [here](https://github.com/robert-lindsey/WCRP/tree/master/splits). 
 
 
 ## License and citation
