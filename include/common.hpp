@@ -55,11 +55,11 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define HYPER_AP2 100.0	// scale
 
 struct bkt_parameters {
-	double mu;	// probability of transitioning from unlearned to learned state 
-	double psi;	// probability of starting in the learned state
-	double pi1;	// probability of a correct response in the learned state
-	double prop0; // probability of a correct response in the unlearned state is prop0*pi1
-				  //  it enforces Pr(correct | learned state) >= Pr(correct | unlearned state) 
+    double mu;	// probability of transitioning from unlearned to learned state
+    double psi;	// probability of starting in the learned state
+    double pi1;	// probability of a correct response in the learned state
+    double prop0; // probability of a correct response in the unlearned state is prop0*pi1
+                  //  it enforces Pr(correct | learned state) >= Pr(correct | unlearned state)
 };
 
 // reads a tab delimited file with the columns: student id, item id, skill id, recall success

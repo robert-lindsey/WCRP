@@ -28,19 +28,19 @@ You can view the command line options for each via the command line argument --h
 
 The command
 
-    ./bin/find_skills --datafile dataset.txt --savefile map_estimate_skills.txt --map_estimate 
+    ./bin/find_skills --datafile ../datasets/spanish_dataset.txt --savefile map_estimate_skills.txt --map_estimate 
 
-will run the MCMC algorithm on the data in dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith entry in map_skills.txt is the skill ID of item i. 
+will run the MCMC algorithm on the data in spanish_dataset.txt using default settings. It'll then save the maximum a posteriori (MAP) estimate of the skill assignments to the file map_estimate_skills.txt. The ith entry in map_estimate_skills.txt is the skill ID of item i. 
 
 
 #### Sampling the posterior distribution over skill assignments 
 
 The command
 
-    ./bin/find_skills --datafile dataset.txt --savefile sampled_skills.txt --iterations 3000 --burn 1000
+    ./bin/find_skills --datafile ../datasets/spanish_dataset.txt --savefile sampled_skills.txt --iterations 1000 --burn 500
 
-will run the MCMC algorithm on the data in dataset.txt for 3000 iterations and discard the first 1000 iterations as burn-in. 
-It'll produce sampled_skills.txt which will have 2000 lines, one per post burn-in iteration. 
+will run the MCMC algorithm on the data in spanish_dataset.txt for 1000 iterations and discard the first 500 iterations as burn-in. 
+It'll produce sampled_skills.txt which will have 500 lines, one per post burn-in iteration. 
 The goal of the MCMC algorithm is to draw samples from a probability distribution over skill assignments conditioned on the observed student data. 
 Each line in sampled_skills.txt is a sample from that distribution.
 
@@ -52,7 +52,7 @@ The number of skills will typically vary between samples too.
 
 The command
 
-    ./bin/cross_validation --datafile dataset.txt --savefile predictions.txt  --foldfile folds.txt 
+    ./bin/cross_validation --datafile ../datasets/spanish_dataset.txt --savefile predictions.txt  --foldfile ../splits/spanish_splits.txt 
 
 will produce the file predictions.txt containing the expected posterior probability of recall for each of the trials of the students in a heldout set of students. There will be one line per replication-fold-student-trial. 
 
@@ -75,8 +75,8 @@ You can provide the file to WCRP via the command line argument --expertfile.
 An example file is available [here](https://github.com/robert-lindsey/WCRP/blob/master/datasets/spanish_expert_labels.txt)
 
 The parameter beta in the model controls how much the prior is drawn toward the expert-provided skills.
-A value of 0 will have the model ignore the expert-provided skills, and the model will deterministically use
-the expert-provided skills as beta approaches 1. 
+A value of 0 will have the model ignore the expert-provided skills, and as beta approaches 1 the model will deterministically use
+the expert-provided skills. 
 The command line options of WCRP allow you to hold beta constant at a specified value or to have the model give
 beta the Bayesian treatment by treating it as another random nuisance variable. 
 

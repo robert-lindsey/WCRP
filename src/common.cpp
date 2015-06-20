@@ -48,7 +48,7 @@ void load_student_data(const char * filename, std::vector< std::vector<bool> > &
     }
     in.close();
 
-    std::cout << "dataset has " << num_students << " students and " << num_items << " items" << std::endl;
+    std::cout << std::string(filename) << " has " << num_students << " students and " << num_items << " items" << std::endl;
 
     // initialize
     recall_sequences.resize(num_students);
@@ -60,6 +60,7 @@ void load_student_data(const char * filename, std::vector< std::vector<bool> > &
         recall_sequences[student].push_back(recall);
         item_sequences[student].push_back(item);
     }
+    
     in.close();
 }
 
