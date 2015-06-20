@@ -80,6 +80,7 @@ student 1 was presented with item 2 and produced a correct response.
 Our model's nonparametric prior distribution over skill labels can leverage skill labels provided by a human domain expert. 
 If you want to provide them to our model, create a text file with one line per item. 
 The ith line should be the expert-provided skill ID for the ith item. 
+You can provide the file to WCRP via the command line argument --expertfile.
 
 The parameter beta in the model controls how much the prior is drawn toward the expert-provided skills.
 A value of 0 will have the model ignore the expert-provided skills, and the model will deterministically use

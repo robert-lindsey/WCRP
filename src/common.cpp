@@ -32,8 +32,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // all ids are assumed to start at 0 and be contiguous
 void load_student_data(const char * filename, std::vector< std::vector<bool> > & recall_sequences, std::vector< std::vector<size_t> > & item_sequences, size_t & num_students, size_t & num_items, size_t & num_skills) {
 
-    num_students=0, num_items=0, num_skills=0;
-    size_t student, item, skill, recall;
+    num_students=0, num_items=0;
+    size_t student, item, recall;
 
     std::ifstream in(filename);
     if (!in.is_open()) {
@@ -42,13 +42,13 @@ void load_student_data(const char * filename, std::vector< std::vector<bool> > &
     }
 
     // figure out how many students, items, and skills there are
-    while (in >> student >> item >> skill >> recall) {
+    while (in >> student >> item >> recall) {
         num_students = std::max(student+1, num_students);
         num_items = std::max(item+1, num_items);
-        num_skills = std::max(skill+1, num_skills);
     }
     in.close();
-    std::cout << "dataset has " << num_students << " students, " << num_items << " items, and " << num_skills << " expert-provided skills" << std::endl;
+
+    std::cout << "dataset has " << num_students << " students and " << num_items << " items" << std::endl;
 
     // initialize
     recall_sequences.resize(num_students);
@@ -56,7 +56,7 @@ void load_student_data(const char * filename, std::vector< std::vector<bool> > &
 
     // read the dataset
     in.open(filename);
-    while (in >> student >> item >> skill >> recall) {
+    while (in >> student >> item >> recall) {
         recall_sequences[student].push_back(recall);
         item_sequences[student].push_back(item);
     }
