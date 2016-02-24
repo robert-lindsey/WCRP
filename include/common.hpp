@@ -55,7 +55,8 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define HYPER_AP2 100.0	// scale
 
 struct bkt_parameters {
-    double mu;	// probability of transitioning from unlearned to learned state
+    double mu01; // probability of transitioning from unlearned to learned state
+    double mu10; // probability of transition from learned to unlearned state (0 in typical BKT formulations)
     double psi;	// probability of starting in the learned state
     double pi1;	// probability of a correct response in the learned state
     double prop0; // probability of a correct response in the unlearned state is prop0*pi1

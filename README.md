@@ -1,3 +1,10 @@
+# Forgetting
+
+This branch contains a slight extension to BKT. It allows for forgetting.
+
+If you're trying to replicate the results of the paper, do not use this branch. 
+
+
 # WCRP
 
 WCRP is a Weighted Chinese Restaurant Process model for inferring skill labels in Bayesian Knowledge Tracing. 

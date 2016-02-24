@@ -340,7 +340,8 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
                 // update the skill's BKT parameters in random order
                 vector<double * > param_ptrs;
                 param_ptrs.push_back(&(table_itr->second.psi));
-                param_ptrs.push_back(&(table_itr->second.mu));
+                param_ptrs.push_back(&(table_itr->second.mu01));
+		param_ptrs.push_back(&(table_itr->second.mu10));
                 param_ptrs.push_back(&(table_itr->second.pi1));
                 param_ptrs.push_back(&(table_itr->second.prop0));
                 generator->shuffle(param_ptrs);
@@ -491,13 +492,14 @@ void MixtureWCRP::record_sample(const double train_ll) {
             const struct bkt_parameters & skill_params = parameters.at(table_id);
             const double skill_pi1 = skill_params.pi1;
             const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-            const double skill_mu = skill_params.mu;
+            const double skill_mu01 = skill_params.mu01;
+	    const double skill_mu10 = skill_params.mu10;
             const double cur_p_hat = p_hat.at(table_id);
 
             pRT_samples[student][trial].push_back(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat); // record prediction
 
-            if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
-            else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+            if (did_recall) p_hat[table_id] = ( (1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+            else p_hat[table_id] = ( (1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
         }
     }
 }
@@ -516,7 +518,8 @@ bool MixtureWCRP::studied_any_of(const size_t student, const vector<size_t> & it
 // (BKT breaks down if the parameters are ever actually 0 or 1)
 void MixtureWCRP::draw_bkt_param_prior(struct bkt_parameters & params) const {
     params.psi = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
-    params.mu = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
+    params.mu01 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
+    params.mu10 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
     params.pi1 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
     params.prop0 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
 }
@@ -612,7 +615,8 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
     const struct bkt_parameters & skill_params = parameters.at(table_id);
     const double skill_pi1 = skill_params.pi1;
     const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-    const double skill_mu = skill_params.mu;
+    const double skill_mu01 = skill_params.mu01;
+    const double skill_mu10 = skill_params.mu10;
     const double skill_psi = skill_params.psi;
 
     // for each student who ever practiced this skill
@@ -630,11 +634,11 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
             const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
             if (trial_pair.second) { // the student responded correctly
                 if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
-                cur_p_hat = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+                cur_p_hat = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
             }
             else { // the student responded incorrectly
                 if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
-                cur_p_hat = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+                cur_p_hat = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
             }
         }
 
@@ -664,7 +668,8 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
     const struct bkt_parameters & skill_params = parameters.at(table_id);
     const double skill_pi1 = skill_params.pi1;
     const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-    const double skill_mu = skill_params.mu;
+    const double skill_mu01 = skill_params.mu01;
+    const double skill_mu10 = skill_params.mu10;
 
     for (size_t student_idx = 0; student_idx < affected_students.size(); student_idx++) {
 
@@ -688,11 +693,11 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
                 const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
                 if (trial_pair.second) { // the student responded correctly
                     student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
-                    cur_p_hat = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+                    cur_p_hat = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
                 }
                 else { // the student responded incorrectly
                     student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
-                    cur_p_hat = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+                    cur_p_hat = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
                 }
             }
         }
@@ -727,13 +732,14 @@ void MixtureWCRP::cache_p_hat(const size_t student, const size_t end_trial, boos
         const struct bkt_parameters & skill_params = parameters.at(table_id);
         const double skill_pi1 = skill_params.pi1;
         const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-        const double skill_mu = skill_params.mu;
+        const double skill_mu01 = skill_params.mu01;
+	const double skill_mu10 = skill_params.mu10;
         const double cur_p_hat = p_hat.at(table_id);
         const double one_minus_cur_p_hat = 1.0 - cur_p_hat;
 
         // update
-        if (did_recall) p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * one_minus_cur_p_hat) / (skill_pi1 * cur_p_hat + skill_pi0 * one_minus_cur_p_hat);
-        else p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * one_minus_cur_p_hat) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * one_minus_cur_p_hat);
+        if (did_recall) p_hat[table_id] = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * one_minus_cur_p_hat) / (skill_pi1 * cur_p_hat + skill_pi0 * one_minus_cur_p_hat);
+        else p_hat[table_id] = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * one_minus_cur_p_hat) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * one_minus_cur_p_hat);
     }
 }
 
@@ -821,7 +827,8 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
         const struct bkt_parameters & skill_params = parameters.at(table_id);
         const double skill_pi1 = skill_params.pi1;
         const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-        const double skill_mu = skill_params.mu;
+        const double skill_mu01 = skill_params.mu01;
+	const double skill_mu10 = skill_params.mu10;
         const double cur_p_hat = p_hat.at(table_id);
 
         // prediction
@@ -830,11 +837,11 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
         // update
         if (did_recall) {
             if (trial >= start_trial) log_lik += log(pRT);
-            p_hat[table_id] = (skill_pi1 * cur_p_hat + skill_mu * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+            p_hat[table_id] = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
         }
         else {
             if (trial >= start_trial) log_lik += log(1.0 - pRT);
-            p_hat[table_id] = ((1.0 - skill_pi1) * cur_p_hat + skill_mu * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0- skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+            p_hat[table_id] = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0- skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
         }
     }
 
