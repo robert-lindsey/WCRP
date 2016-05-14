@@ -44,7 +44,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/unordered_map.hpp>
-
+#include <boost/math/distributions/students_t.hpp>
 #define UNASSIGNED 0		// special flag to indicate a item currently has no table assignment
 #define TOL .0000000000001	// used to check for equality of doubles
 #define LOG_TOL -29.9336062089
@@ -54,13 +54,17 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define HYPER_AP1 1.0	// shape
 #define HYPER_AP2 100.0	// scale
 
+#define ABILITIES_MEAN 0.0
+#define HYPER_AV1 2.0 // shape
+#define HYPER_AV2 10.0 // scale
+#define ABILITY_SAMPLES 200
+
 struct bkt_parameters {
     double mu01; // probability of transitioning from unlearned to learned state
     double mu10; // probability of transition from learned to unlearned state (0 in typical BKT formulations)
     double psi;	// probability of starting in the learned state
-    double pi1;	// probability of a correct response in the learned state
-    double prop0; // probability of a correct response in the unlearned state is prop0*pi1
-                  //  it enforces Pr(correct | learned state) >= Pr(correct | unlearned state)
+    double gamma1;	// logit(p(correct=1|state=1)) = gamma1 + ability
+    double gamma0; // logit(p(correct=1|state=0)) = gamma0 + ability
 };
 
 // reads a tab delimited file with the columns: student id, item id, skill id, recall success

@@ -48,6 +48,9 @@ inline bool equals_one(const double x) {
      return abs(1.0 - x) <= TOL;
 }
 
+inline double clamp(const double prob) {
+    return min(0.99, max(0.01, prob));
+}
 // log(proportional to a uniform prior on log(x) )
 double log_loggamma_prior_density(const double x) {
     assert(x <= 0);
@@ -114,29 +117,33 @@ double MixtureWCRP::compute_K(const size_t item, const size_t table_id, const bo
 
 
 // object constructor
-MixtureWCRP::MixtureWCRP(Random * generator, 
-                         const set<size_t> & train_students, 
-                         const vector< vector<bool> > & recall_sequences, 
-                         const vector< vector<size_t> > & item_sequences, 
-                         const vector<size_t> & provided_skill_assignments, 
-                         const double beta, 
-                         const double init_alpha_prime, 
-                         const size_t num_students, 
-                         const size_t num_items, 
-                         const size_t num_subsamples) :
-                         
- generator(generator), 
- train_students(train_students), 
- recall_sequences(recall_sequences), 
- item_sequences(item_sequences), 
- provided_skill_assignments(provided_skill_assignments), 
- num_students(num_students), 
- num_items(num_items), 
- num_subsamples(num_subsamples), 
- use_expert_labels(equals_one(beta)), 
- log_gamma(log(1.0 - beta)), 
- num_used_skills(0), 
- tables_ever_instantiated(UNASSIGNED+1) {
+MixtureWCRP::MixtureWCRP(Random * generator,
+                         const set<size_t> & train_students,
+                         const vector< vector<bool> > & recall_sequences,
+                         const vector< vector<size_t> > & item_sequences,
+                         const vector<size_t> & provided_skill_assignments,
+                         const double beta,
+                         const double init_alpha_prime,
+                         const size_t num_students,
+                         const size_t num_items,
+                         const size_t num_subsamples, 
+                         const bool has_forgetting,
+                         const bool has_abilities) :
+
+ generator(generator),
+ train_students(train_students),
+ recall_sequences(recall_sequences),
+ item_sequences(item_sequences),
+ provided_skill_assignments(provided_skill_assignments),
+ num_students(num_students),
+ num_items(num_items),
+ num_subsamples(num_subsamples),
+ use_expert_labels(equals_one(beta)),
+ log_gamma(log(1.0 - beta)),
+ num_used_skills(0),
+ tables_ever_instantiated(UNASSIGNED+1),
+ has_forgetting(has_forgetting),
+ has_abilities(has_abilities) {
 
     // for legacy reasons, i define gamma = 1.0 - beta and do inference on log_gamma
     const double gamma = 1.0 - beta;
@@ -150,6 +157,17 @@ MixtureWCRP::MixtureWCRP(Random * generator,
     // the variable all_items will be useful during gibbs sampling
     all_items.resize(num_items);
     for (size_t i = 0; i < num_items; i++) all_items[i] = i;
+
+    // initialize student abilities and
+    // mapping from training student ids to sequential ids
+    size_t k = 0;
+    abilities.resize(train_students.size());
+    for (std::set<size_t>::iterator it=train_students.begin(); it!=train_students.end(); ++it) {
+        abilities[k] = (has_abilities) ? generator->sampleNormal(0, 1) : 0.0;
+        train_students_indecies[*it] = k++;
+    }
+
+
 
     // to avoid unnecessary work during MCMC, for each student-item pair, figure out the trial index it was first studied
     first_encounter.resize(num_students);
@@ -181,7 +199,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
             }
         }
     }
-
+    
     students_who_studied.resize(num_items);
     all_first_encounters.resize(num_items);
     for (size_t item = 0; item < num_items; item++) {
@@ -192,7 +210,7 @@ MixtureWCRP::MixtureWCRP(Random * generator,
             }
         }
     }
-
+    
     // initialize alpha'
     // if init_alpha_prime < 0, it's a special flag indicating that we should sample it to initialize
     if (init_alpha_prime < 0) log_alpha_prime = log(generator->sampleGamma(HYPER_AP1, HYPER_AP2)); // sample value
@@ -259,9 +277,10 @@ MixtureWCRP::~MixtureWCRP() {
 }
 
 
-// returns the expected posterior probability that the student responds correctly to the trial number 
+// returns the expected posterior probability that the student responds correctly to the trial number
 double MixtureWCRP::get_estimated_recall_prob(const size_t student, const size_t trial) const {
     assert(!pRT_samples.at(student).at(trial).empty()); // need to have called run_mcmc first
+
     return vector_mean(pRT_samples.at(student).at(trial));
 }
 
@@ -274,7 +293,7 @@ vector< vector<size_t> > MixtureWCRP::get_sampled_skill_labels() const {
 }
 
 
-// returns the skill assignments which maximized the training data log likelihood 
+// returns the skill assignments which maximized the training data log likelihood
 // the returned vector has one entry per item denoting the skill id
 vector<size_t> MixtureWCRP::get_most_likely_skill_labels() const {
     assert(!skill_label_samples.empty()); // need to have called run_mcmc first
@@ -301,6 +320,59 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
         //cout << "SAMPLING ITERATION " << (iter+1) << " OF " << num_iterations << endl;
 
         clock_t begin = clock();
+
+        // update student abilities if model supports them
+        if (has_abilities) {
+            for (std::set<size_t>::iterator it=train_students.begin(); it!=train_students.end(); ++it) {
+                size_t student = *it;
+
+                // compute posterior predictive
+                const double alpha = HYPER_AV1 + (train_students.size() - 1) / 2.0;
+                double sum_squares = 0.0;
+                for (size_t k = 0; k < abilities.size(); ++k) {
+                    if (train_students_indecies[student] == k)
+                        continue;
+                    sum_squares += abilities[k] * abilities[k];
+                }
+                const double beta = HYPER_AV2 + sum_squares / 2;
+                const double dof = 2 * alpha;
+                const double scale = sqrt(beta/alpha);
+
+                //// RESAMPLE ABILITY PARAMETER
+                slice_resample_ability_parameter(&(abilities[train_students_indecies[student]]), student, dof, ABILITIES_MEAN, scale);
+
+            }
+            if (!use_expert_labels) {
+            	for (size_t item = 0; item < num_items; item++) {
+                	const vector<size_t> & affected_students = students_who_studied.at(item);
+                	const vector<size_t> & first_exposures = all_first_encounters.at(item);
+                	const size_t cur_table_id = seating_arrangement.at(item);
+
+                	// temporarily unassign the item from its table
+                	const bool deleted_table = remove_item_from_table(item, cur_table_id);
+
+                	// create a singleton skill with this item
+                	const size_t tmp_table_id = tables_ever_instantiated++;
+                	assign_item_to_table(item, tmp_table_id, true);
+
+                	// record the log likelihood for this singleton skill under each draw from the prior
+                	for (size_t subsample = 0; subsample < num_subsamples; subsample++) {
+                    	parameters[tmp_table_id] = prior_samples[subsample];
+                    	singleton_skill_data_lp[item][subsample] = skill_log_likelihood(tmp_table_id, affected_students, first_exposures);
+                	}
+
+                	// delete the singleton skill
+                	remove_item_from_table(item, tmp_table_id);
+
+                	// reassign the item to its original table
+                	if (!deleted_table) assign_item_to_table(item, cur_table_id, false);
+                	else assign_item_to_table(item, tables_ever_instantiated++, true);
+            	}
+            }
+            
+            
+        }
+        
 
         // update alpha' and gamma
         //cout << "  resampling WCRP hyperparameters" << endl;
@@ -338,16 +410,34 @@ void MixtureWCRP::run_mcmc(const size_t num_iterations, const size_t burn, const
                 }
 
                 // update the skill's BKT parameters in random order
+
                 vector<double * > param_ptrs;
                 param_ptrs.push_back(&(table_itr->second.psi));
                 param_ptrs.push_back(&(table_itr->second.mu01));
-		param_ptrs.push_back(&(table_itr->second.mu10));
-                param_ptrs.push_back(&(table_itr->second.pi1));
-                param_ptrs.push_back(&(table_itr->second.prop0));
-                generator->shuffle(param_ptrs);
+		        param_ptrs.push_back(&(table_itr->second.mu10));
+                param_ptrs.push_back(&(table_itr->second.gamma1));
+                param_ptrs.push_back(&(table_itr->second.gamma0));
+
+                vector<int> param_inds;
+                for (size_t k = 0; k < 5; ++k)
+                    param_inds.push_back(k);
+                generator->shuffle(param_inds);
+
                 double cur_ll = skill_log_likelihood(table_id, students_to_include, first_exposures);
-                for (vector<double *>::iterator param_itr = param_ptrs.begin(); param_itr != param_ptrs.end(); param_itr++) {
-                    cur_ll = slice_resample_bkt_parameter(table_id, *param_itr, students_to_include, first_exposures, cur_ll);
+                for (vector<int>::iterator param_itr = param_inds.begin(); param_itr != param_inds.end(); param_itr++) {
+                    
+                    // skip forgetting parameter if the model has no forgetting
+                    if (!has_forgetting && *param_itr == 2)
+                        continue;
+                       
+                    double* param_ptr = param_ptrs[*param_itr];
+                    
+                    if (*param_itr > 2) {
+                        cur_ll = slice_resample_bkt_parameter(table_id, param_ptr, students_to_include, first_exposures, cur_ll, -5, 5);
+                    } else {
+                        cur_ll = slice_resample_bkt_parameter(table_id, param_ptr, students_to_include, first_exposures, cur_ll, TOL, ONEMINUSTOL);
+                    }
+
                 }
             }
         }
@@ -473,6 +563,27 @@ void MixtureWCRP::record_sample(const double train_ll) {
     }
     skill_label_samples.push_back(cur_assignments);
 
+     // generate ability samples for new students from posterior predictive
+     // compute posterior predictive
+     const double alpha = HYPER_AV1 + train_students.size() / 2.0;
+     double sum_squares = 0.0;
+     for (size_t k = 0; k < abilities.size(); ++k) {
+          sum_squares += abilities[k] * abilities[k];
+     }
+     const double beta = HYPER_AV2 + sum_squares / 2;
+     const double dof = 2 * alpha;
+     const double scale = sqrt(beta/alpha);
+     vector<double> ability_samples;
+     if (has_abilities) {
+         ability_samples.resize(ABILITY_SAMPLES);
+         for (size_t k = 0; k < ABILITY_SAMPLES; ++k)
+            ability_samples[k] = generator->sampleNonStandardStudentT(dof, ABILITIES_MEAN, scale);
+            //cout << "generated ability samples" << endl;
+
+     } else {
+         ability_samples.push_back(0.0);
+     }
+     
     // record the model predictions for the entire dataset
     for (size_t student = 0; student < num_students; student++) {
 
@@ -480,27 +591,88 @@ void MixtureWCRP::record_sample(const double train_ll) {
         const vector<bool> & recall_sequence = recall_sequences.at(student);
         const vector<size_t> & item_sequence = item_sequences.at(student);
 
-        // initialize p_hat
-        boost::unordered_map<size_t, double> p_hat;
-        for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
-
-        for (size_t trial = 0; trial < recall_sequence.size(); trial++) {
-
-            // define some variables for notational clarity
-            const bool did_recall = recall_sequence.at(trial);
-            const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
-            const struct bkt_parameters & skill_params = parameters.at(table_id);
-            const double skill_pi1 = skill_params.pi1;
-            const double skill_pi0 = skill_pi1 *  skill_params.prop0;
-            const double skill_mu01 = skill_params.mu01;
-	    const double skill_mu10 = skill_params.mu10;
-            const double cur_p_hat = p_hat.at(table_id);
-
-            pRT_samples[student][trial].push_back(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat); // record prediction
-
-            if (did_recall) p_hat[table_id] = ( (1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
-            else p_hat[table_id] = ( (1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+        // if training student, use existing ability otherwise use ability samples from posterior predictive
+        vector<double> student_abilities;
+        if (train_students.count(student)) {
+            student_abilities.push_back(abilities[train_students_indecies.at(student)]);
+        } else {
+            student_abilities = ability_samples;
         }
+        
+        assert(train_students.count(student) == 0 || student_abilities.size() == 1);
+        assert(train_students.count(student) > 0 || student_abilities.size() == (has_abilities) ? ABILITY_SAMPLES : 1);
+        
+        // space to handle predictions for each ability value
+        vector< vector<double> > local_pRT(student_abilities.size());
+        for (size_t a = 0; a < student_abilities.size(); ++a)
+            local_pRT[a].resize(recall_sequence.size());
+            
+        for (size_t a = 0; a < student_abilities.size(); ++a)
+        {
+            const double ability = student_abilities[a];
+
+            // initialize p_hat
+            boost::unordered_map<size_t, double> p_hat;
+            for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
+
+            for (size_t trial = 0; trial < recall_sequence.size(); trial++) {
+
+                // define some variables for notational clarity
+                const bool did_recall = recall_sequence.at(trial);
+                const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
+                const struct bkt_parameters & skill_params = parameters.at(table_id);
+                const double skill_pi1 = 1 / (1 + exp(-skill_params.gamma1 - ability));
+                const double skill_pi0 = 1 / (1 + exp(-skill_params.gamma0 - ability));
+                const double skill_mu01 = skill_params.mu01;
+                const double skill_mu10 = skill_params.mu10;
+                const double cur_p_hat = p_hat.at(table_id);
+
+                //pRT_samples[student][trial].push_back(clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat)); // record prediction
+                //pRT_sum[trial] += clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
+                local_pRT[a][trial] = clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
+                if (did_recall) p_hat[table_id] = ( (1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
+                else p_hat[table_id] = ( (1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
+            }
+        }
+        
+        // normalize predictions
+        
+        // start with alpha prior
+        boost::math::students_t prior(dof);
+        vector<double> ability_prior(student_abilities.size());
+        double alpha_sum = 0.0;
+        for (size_t a = 0; a < student_abilities.size(); ++a) {
+            ability_prior[a] = pdf(prior, (student_abilities[a] - ABILITIES_MEAN) / scale);
+            alpha_sum += ability_prior[a];
+        }
+        // normalize alpha prior
+        for (size_t a = 0; a < student_abilities.size(); ++a) 
+            ability_prior[a] /= alpha_sum;
+        
+        for (size_t trial = 0; trial < recall_sequence.size(); ++trial) {
+            // make prediction by integrating over alpha
+            double pred = 0.0;
+            alpha_sum = 0.0;
+            for (size_t a = 0; a < student_abilities.size(); ++a) {
+                pred += local_pRT[a][trial] * ability_prior[a];
+                
+                const bool did_recall = recall_sequence.at(trial);
+                
+                // update belief about alpha
+                double obs_prob = (did_recall) ? local_pRT[a][trial] : 1-local_pRT[a][trial];
+                ability_prior[a] *= obs_prob;
+                alpha_sum += ability_prior[a];
+            }
+            
+            // add prediction
+            pRT_samples[student][trial].push_back(clamp(pred));
+            
+            // renormalize alpha
+            for (size_t a = 0; a < student_abilities.size(); ++a) 
+                ability_prior[a] /= alpha_sum;
+            
+        }
+        
     }
 }
 
@@ -519,9 +691,14 @@ bool MixtureWCRP::studied_any_of(const size_t student, const vector<size_t> & it
 void MixtureWCRP::draw_bkt_param_prior(struct bkt_parameters & params) const {
     params.psi = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
     params.mu01 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
-    params.mu10 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
-    params.pi1 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
-    params.prop0 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
+    
+    // no forgetting/forgetting
+    if (has_forgetting)
+        params.mu10 = TOL + (ONEMINUSTOL - TOL) * generator->sampleUniform01();
+    else
+        params.mu10 = 0;
+    params.gamma1 =  generator->sampleNormal(0, 1);
+    params.gamma0 = generator->sampleNormal(0, 1);
 }
 
 
@@ -613,8 +790,6 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 
     // define some constants for notational clarity
     const struct bkt_parameters & skill_params = parameters.at(table_id);
-    const double skill_pi1 = skill_params.pi1;
-    const double skill_pi0 = skill_pi1 *  skill_params.prop0;
     const double skill_mu01 = skill_params.mu01;
     const double skill_mu10 = skill_params.mu10;
     const double skill_psi = skill_params.psi;
@@ -629,15 +804,20 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
         const vector< pair<size_t, bool> > & recall_items = item_and_recall_sequences.at(student);
         double cur_p_hat = skill_psi;
 
+        const double ability = abilities[train_students_indecies.at(student)];
+        const double skill_pi1 = 1 / (1 + exp(-skill_params.gamma1 - ability));
+        const double skill_pi0 = 1 / (1 + exp(-skill_params.gamma0 - ability));
+
         // for each trial of this skill
         for (vector<size_t>::const_iterator trial_idx_itr = trial_lookup.at(table_id).at(student).begin(); trial_idx_itr != trial_lookup.at(table_id).at(student).end(); trial_idx_itr++) {
             const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
+            double pRT = clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat); // prediction
             if (trial_pair.second) { // the student responded correctly
-                if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
+                if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(pRT);
                 cur_p_hat = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
             }
             else { // the student responded incorrectly
-                if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
+                if (*trial_idx_itr >= start_trial) student_skill_log_lik += log(1.0 - pRT);
                 cur_p_hat = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
             }
         }
@@ -666,8 +846,7 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
 
     // for convenience
     const struct bkt_parameters & skill_params = parameters.at(table_id);
-    const double skill_pi1 = skill_params.pi1;
-    const double skill_pi0 = skill_pi1 *  skill_params.prop0;
+
     const double skill_mu01 = skill_params.mu01;
     const double skill_mu10 = skill_params.mu10;
 
@@ -687,16 +866,23 @@ double MixtureWCRP::skill_log_likelihood(const size_t table_id, const vector<siz
         const vector< pair<size_t, bool> > & recall_items = item_and_recall_sequences.at(student);
         double cur_p_hat = init_p_hat.at(student_idx).at(table_id);
 
+        // get student ability
+        double ability = abilities[train_students_indecies.at(student)];
+
+        const double skill_pi1 = 1 / (1 + exp(-skill_params.gamma1 - ability));
+        const double skill_pi0 = 1 / (1 + exp(-skill_params.gamma0 - ability));
+
         // for each trial of this skill
         for (vector<size_t>::const_iterator trial_idx_itr = trial_lookup.at(table_id).at(student).begin(); trial_idx_itr != trial_lookup.at(table_id).at(student).end(); trial_idx_itr++) {
             if (*trial_idx_itr >= start_trial) {
                 const pair<size_t, bool> & trial_pair = recall_items.at(*trial_idx_itr);
+                double pRT = clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
                 if (trial_pair.second) { // the student responded correctly
-                    student_skill_log_lik += log(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
+                    student_skill_log_lik += log(pRT);
                     cur_p_hat = ((1.0 - skill_mu10) * skill_pi1 * cur_p_hat + skill_mu01 * skill_pi0 * (1.0 - cur_p_hat)) / (skill_pi1 * cur_p_hat + skill_pi0 * (1.0 - cur_p_hat));
                 }
                 else { // the student responded incorrectly
-                    student_skill_log_lik += log(1.0 - (skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat));
+                    student_skill_log_lik += log(1.0 - pRT);
                     cur_p_hat = ((1.0 - skill_mu10) * (1.0 - skill_pi1) * cur_p_hat + skill_mu01 * (1.0 - skill_pi0) * (1.0 - cur_p_hat)) / ((1.0 - skill_pi1) * cur_p_hat + (1.0 - skill_pi0) * (1.0 - cur_p_hat));
                 }
             }
@@ -724,16 +910,20 @@ void MixtureWCRP::cache_p_hat(const size_t student, const size_t end_trial, boos
     // initialize p_hat
     for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
 
+    // get student ability
+    double ability = abilities[train_students_indecies.at(student)];
+
+
     for (size_t trial = 0; trial < end_trial; trial++) {
 
         // define some constants for notational clarity
         const bool did_recall = recall_sequence.at(trial);
         const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
         const struct bkt_parameters & skill_params = parameters.at(table_id);
-        const double skill_pi1 = skill_params.pi1;
-        const double skill_pi0 = skill_pi1 *  skill_params.prop0;
+        const double skill_pi1 = 1 / (1 + exp(-skill_params.gamma1 - ability));
+        const double skill_pi0 = 1 / (1 + exp(-skill_params.gamma0 - ability));
         const double skill_mu01 = skill_params.mu01;
-	const double skill_mu10 = skill_params.mu10;
+	    const double skill_mu10 = skill_params.mu10;
         const double cur_p_hat = p_hat.at(table_id);
         const double one_minus_cur_p_hat = 1.0 - cur_p_hat;
 
@@ -819,20 +1009,24 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
     boost::unordered_map<size_t, double> p_hat; // psi is a vector of length max_num_skills
     for (boost::unordered_map<size_t, struct bkt_parameters>::const_iterator table_itr = parameters.begin(); table_itr != parameters.end(); table_itr++) p_hat[table_itr->first] = table_itr->second.psi;
 
+    // get student ability
+    double ability = abilities[train_students_indecies.at(student)];
+
+
     for (size_t trial = 0; trial < num_trials; trial++) {
 
         // define some constants for notational clarity
         const bool did_recall = recall_sequence.at(trial);
         const size_t table_id = seating_arrangement.at(item_sequence.at(trial));
         const struct bkt_parameters & skill_params = parameters.at(table_id);
-        const double skill_pi1 = skill_params.pi1;
-        const double skill_pi0 = skill_pi1 *  skill_params.prop0;
+        const double skill_pi1 = 1 / (1 + exp(-skill_params.gamma1 - ability));
+        const double skill_pi0 = 1 / (1 + exp(-skill_params.gamma0 - ability));
         const double skill_mu01 = skill_params.mu01;
-	const double skill_mu10 = skill_params.mu10;
+	    const double skill_mu10 = skill_params.mu10;
         const double cur_p_hat = p_hat.at(table_id);
 
         // prediction
-        const double pRT = skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat;
+        const double pRT = clamp(skill_pi0 * (1.0 - cur_p_hat) + skill_pi1 * cur_p_hat);
 
         // update
         if (did_recall) {
@@ -851,11 +1045,54 @@ double MixtureWCRP::data_log_likelihood(const size_t student, const size_t start
 }
 
 
-// perform a slice sampling update on the provided BKT parameter, assuming a uniform prior
-double MixtureWCRP::slice_resample_bkt_parameter(const size_t table_id, double * param, const vector<size_t> & students_to_include, const vector<size_t> & first_exposures, const double cur_ll) {
+// perform a slice sampling update on the provided ability 
+double MixtureWCRP::slice_resample_ability_parameter(double * param, const size_t student,  const double dof, const double offset, const double scale) {
+    
+    const double upper_bound = 5;
+    const double lower_bound = -5;
+    size_t n = 0;
+    
+    boost::math::students_t prior(dof);
+    
+    double cur_ll = data_log_likelihood(student, 0, n) + log(pdf(prior, (*param - offset)/scale));
+    
+    const double initial_bracket_width = (upper_bound - lower_bound) / 10.0;
+    const double cur_val = *param;
+    const double jittered_cur_ll = cur_ll + log(generator->sampleUniform01());
+    const double split_location = generator->sampleUniform01();
+    double x_l = max(lower_bound, cur_val - split_location * initial_bracket_width);
+    double x_r = min(upper_bound, cur_val + (1.0 - split_location) * initial_bracket_width);
 
-    const double lower_bound = TOL;
-    const double upper_bound = ONEMINUSTOL;
+    *param = x_l;
+    while (x_l >= lower_bound && (data_log_likelihood(student, 0, n) + log(pdf(prior, (*param - offset)/scale))) > jittered_cur_ll) {
+        x_l -= initial_bracket_width;
+        *param = x_l;
+    }
+    x_l = max(x_l, lower_bound);
+
+    *param = x_r;
+    while (x_r <= upper_bound && (data_log_likelihood(student, 0, n) + log(pdf(prior, (*param - offset)/scale))) > jittered_cur_ll) {
+        x_r += initial_bracket_width;
+        *param = x_r;
+    }
+    x_r = min(x_r, upper_bound);
+
+    while (true) {
+        *param = x_l + (x_r - x_l) * generator->sampleUniform01();
+        const double proposal_ll =  data_log_likelihood(student, 0, n) + log(pdf(prior, (*param - offset)/scale));
+        if (proposal_ll > jittered_cur_ll) return proposal_ll;
+        else {
+            if (*param > cur_val) x_r = *param;
+            else if (*param < cur_val) x_l = *param;
+            else return proposal_ll;
+        }
+    }
+    
+}
+    
+// perform a slice sampling update on the provided BKT parameter, assuming a uniform prior
+double MixtureWCRP::slice_resample_bkt_parameter(const size_t table_id, double * param, const vector<size_t> & students_to_include, const vector<size_t> & first_exposures, const double cur_ll, const double lower_bound, const double upper_bound) {
+
     const double initial_bracket_width = (upper_bound - lower_bound) / 10.0;
     const double cur_val = *param;
     const double jittered_cur_ll = cur_ll + log(generator->sampleUniform01());
@@ -890,7 +1127,7 @@ double MixtureWCRP::slice_resample_bkt_parameter(const size_t table_id, double *
 }
 
 
-// perform a slice sampling update on the provided WCRP hyperparameter 
+// perform a slice sampling update on the provided WCRP hyperparameter
 double MixtureWCRP::slice_resample_wcrp_param(double * param, const double cur_seating_lp, const double lower_bound, const double upper_bound, const double initial_bracket_width, prior_log_density_fn prior_lp) {
 
     const double cur_val = *param;

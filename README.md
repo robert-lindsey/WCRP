@@ -1,8 +1,11 @@
-# Forgetting
+# Forgetting and Student Abilities
 
-This branch contains a slight extension to BKT. It allows for forgetting.
+This is the version of WCRP we used in our [EDM2016 paper](http://arxiv.org/pdf/1604.02416v1.pdf).
 
-If you're trying to replicate the results of the paper, do not use this branch. 
+This branch contains a slight extension to BKT. It allows for forgetting and individualization of guess and slip probabilities.
+
+If you're trying to replicate the results of the [NIPS2014 paper](http://www.cs.colorado.edu/~mozer/Research/Selected%20Publications/reprints/LindseyKhajahMozer2014.pdf),
+do not use this branch. 
 
 
 # WCRP

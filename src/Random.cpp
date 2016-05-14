@@ -64,6 +64,11 @@ double Random::sampleStudentT(double dof) {
     return gsl_ran_tdist (rndgenerator, dof);
 }
 
+double Random::sampleNonStandardStudentT(double dof, double offset, double scale) {
+    return offset + scale * this->sampleStudentT(dof);
+}
+    
+    
 void Random::sampleBeta(vector<double> & output, unsigned int num_vals, double alpha, double beta) {
     output.resize(num_vals);
     for (unsigned int i=0; i < num_vals; i++) output[i] = sampleBeta(alpha, beta);

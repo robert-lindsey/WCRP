@@ -44,7 +44,9 @@ class MixtureWCRP {
                  const double init_alpha_prime,
                  const size_t num_students,
                  const size_t num_items,
-                 const size_t num_subsamples);
+                 const size_t num_subsamples,
+                 const bool has_forgetting,
+                 const bool has_abilities);
 
     ~MixtureWCRP();
 
@@ -77,7 +79,8 @@ class MixtureWCRP {
     // see algorithm 8 from http://www.stat.purdue.edu/~rdutta/24.PDF
     void gibbs_resample_skill(const size_t item);
 
-    double slice_resample_bkt_parameter(const size_t skill_id, double * param, const vector<size_t> & students_to_include, const vector<size_t> & first_exposures, const double cur_ll);
+    double slice_resample_ability_parameter(double * param, const size_t student, const double dof, const double offset, const double scale);
+    double slice_resample_bkt_parameter(const size_t skill_id, double * param, const vector<size_t> & students_to_include, const vector<size_t> & first_exposures, const double cur_ll, const double lower_bound, const double upper_bound);
     double slice_resample_wcrp_param(double * param, const double cur_seating_lp, const double lower_bound, const double upper_bound, const double init_bracket, prior_log_density_fn prior_lp);
 
     // bootstraps calculating a student's data log likelihood by precomputed forward state
@@ -102,8 +105,12 @@ class MixtureWCRP {
     const size_t num_items;
     const size_t num_subsamples;
     const bool use_expert_labels;
-
+    const bool has_forgetting;
+    const bool has_abilities;
+    
     // Markov chain state
+    vector<double> abilities; // training students' abilities
+    boost::unordered_map<size_t, size_t> train_students_indecies; // mapping between training student indecies to sequencial indecies (to index abilities
     vector<size_t> seating_arrangement; // seating_arrangement[item] = table id
     boost::unordered_map<size_t, struct bkt_parameters> parameters; // mapping b/w table id and parameter values
     double log_alpha_prime;

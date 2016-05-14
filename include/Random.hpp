@@ -65,6 +65,9 @@ class Random {
     // sample from a student's t-distribution
     double sampleStudentT(double dof);
 
+    // sample from a non standard t' distribution
+    double sampleNonStandardStudentT(double dof, double offset, double scale);
+    
     // sample from a geometric distribution
     unsigned int sampleGeometric(double p);
 

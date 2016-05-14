@@ -40,12 +40,21 @@ int main(int argc, char ** argv) {
     int tmp_num_iterations, tmp_burn, tmp_num_subsamples;
     double init_beta, init_alpha_prime;
     bool infer_beta, infer_alpha_prime;
-
+    bool has_abilities, has_forgetting, use_auto_expertlabels, run_one_test_fold;
+    
     // parse the command line arguments
     po::options_description desc("Allowed options");
     desc.add_options()
             ("help", "print help message")
+            
+            ("run_one_test_fold", po::value<bool>(&run_one_test_fold)->default_value(false), "(optional) run test fold 0 only in each replication")
+            
+            ("use_auto_expertlabels", po::value<bool>(&use_auto_expertlabels)->default_value(false), "(optional) generate expert labels where skill_id = problem_id")
+            ("has_forgetting", po::value<bool>(&has_forgetting)->default_value(false), "(optional) support forgetting")
+            ("has_abilities", po::value<bool>(&has_abilities)->default_value(false), "(optional) support student abilities")
+            
             ("datafile", po::value<string>(&datafile), "(required) file containing the student recall data")
+            
             ("savefile", po::value<string>(&savefile), "(required) file to put the posterior expected probability of recall for the heldout data")
             ("foldfile", po::value<string>(&foldfile), "(required) file with the training-test splits")
             ("expertfile", po::value<string>(&expertfile), "(optional) file containing the expert-provided skill labels")
@@ -103,13 +112,20 @@ int main(int argc, char ** argv) {
 
     // load the expert-provided skill labels if possible
     vector<size_t> provided_skill_labels(num_items, 0);
+    
+          
     if (!expertfile.empty()) load_expert_labels(expertfile.c_str(), provided_skill_labels, num_items);
+    else if (use_auto_expertlabels) {
+        for (int k = 0; k < num_items; ++k) 
+            provided_skill_labels[k] = k;
+    }
     else {
         // tell the model to ignore provided_skill_labels:
         init_beta = 0.0;
         infer_beta = false;
     }
-
+    
+        
     // load the training-test splits
     vector<vector<size_t> > fold_nums;
     size_t num_folds;
@@ -121,9 +137,11 @@ int main(int argc, char ** argv) {
 
     for (size_t replication = 0; replication < fold_nums.size(); replication++) {
         for (size_t test_fold = 0; test_fold < num_folds; test_fold++) {
-
+            if (run_one_test_fold && test_fold > 0)
+            	break;
+            
             cout << "running replication " << replication << ", test fold " << test_fold << endl;
-
+                
             // figure out which students are in the training set for this replication-fold
             set<size_t> train_students;
             for (size_t s = 0; s < num_students; s++) {
@@ -132,16 +150,20 @@ int main(int argc, char ** argv) {
             assert(!train_students.empty());
 
             // create the model
-            MixtureWCRP model(generator, train_students, recall_sequences, item_sequences, provided_skill_labels, init_beta, init_alpha_prime, num_students, num_items, num_subsamples);
+            MixtureWCRP model(generator, train_students, recall_sequences, item_sequences, provided_skill_labels, init_beta, init_alpha_prime, num_students, num_items, 
+                num_subsamples, has_forgetting, has_abilities);
 
             // run the sampler
             model.run_mcmc(num_iterations, burn, infer_beta, infer_alpha_prime);
 
             // write the posterior expected recall probability for each student-trial to the output file
+            
             for (size_t student = 0; student < num_students; student++) {
                 const bool was_heldout = !train_students.count(student);
                 for (size_t trial = 0; trial < recall_sequences.at(student).size(); trial++) {
                     const double mean_prob = model.get_estimated_recall_prob(student, trial);
+                    //cout << replication << "\t" << test_fold << "\t" << was_heldout << "\t" << recall_sequences.at(student).at(trial) << "\t" << mean_prob << endl;
+                
                     out_predictions << replication << "\t" << test_fold << "\t" << was_heldout << "\t" << recall_sequences.at(student).at(trial) << "\t" << mean_prob << endl;
                 }
             }
