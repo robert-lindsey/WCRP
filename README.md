@@ -111,13 +111,10 @@ This code is released under the [MIT License](https://github.com/robert-lindsey/
 
 Please cite our paper in your publications if it helps your research: 
 
-    @incollection{lindsey2014,
-      title = {Automatic Discovery of Cognitive Skills to Improve the Prediction of Student Learning},
-      author = {Lindsey, Robert V and Khajah, Mohammad and Mozer, Michael C},
-      booktitle = {Advances in Neural Information Processing Systems 27},
-      editor = {Z. Ghahramani and M. Welling and C. Cortes and N.D. Lawrence and K.Q. Weinberger},
-      pages = {1386--1394},
-      year = {2014},
-      publisher = {Curran Associates, Inc.},
+    @paper{edm2016howdeep,
+    	author = {Khajah, Mohammad and Lindsey, Robert V and Mozer, Michael C},
+    	title = {How deep is knowledge tracing?},
+    	conference = {Educational Data Mining 2016},
+    	year = {2016}
     }
 
