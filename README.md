@@ -2,7 +2,8 @@
 
 This is the version of WCRP we used in our [EDM2016 paper](http://arxiv.org/pdf/1604.02416v1.pdf).
 
-This branch contains a slight extension to BKT. It allows for forgetting and individualization of guess and slip probabilities.
+This branch contains a slight extension to BKT. It allows for forgetting and individualization of guess and slip probabilities. 
+In the paper we compared variants of WCRP against [our own implementation](https://github.com/mmkhajah/dkt) of Deep Knowledge Tracing.
 
 If you're trying to replicate the results of the [NIPS2014 paper](http://www.cs.colorado.edu/~mozer/Research/Selected%20Publications/reprints/LindseyKhajahMozer2014.pdf),
 do not use this branch. 
